@@ -1406,7 +1406,8 @@
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.2 - Clean Generic Labels)
+  // --------------------------------------------------------------------------
+  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.3 - Guaranteed Close Fix)
   // --------------------------------------------------------------------------
   var activeVoiceRec = null;
   var isVoiceListening = false;
@@ -1421,7 +1422,6 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'yaktube-modal-search-title');
-    modal.style.display = 'none';
 
     modal.innerHTML =
       '<div class="yaktube-modal-search-card">' +
@@ -1484,7 +1484,9 @@
     });
 
     // Close on Back button or Escape
-    backBtn.addEventListener('click', function () {
+    backBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       closeFullSearchModal();
     });
 
@@ -1540,6 +1542,7 @@
 
   function openFullSearchModal(initialQuery, autoStartVoice) {
     var modal = createFullSearchModal();
+    modal.classList.add('yaktube-modal-open');
     modal.style.display = 'flex';
 
     var inp = modal.querySelector('#yaktube-modal-input');
@@ -1562,9 +1565,19 @@
 
   function closeFullSearchModal() {
     var modal = document.getElementById('yaktube-full-search-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.classList.remove('yaktube-modal-open');
+      modal.style.display = 'none';
+    }
     stopVoiceInsideModal();
     announce('Arama penceresi kapatıldı.');
+
+    var trigger = document.querySelector('.yaktube-search-trigger-pill');
+    if (trigger) {
+      try {
+        trigger.focus();
+      } catch (e) {}
+    }
   }
 
   function toggleVoiceInsideModal() {
@@ -1763,7 +1776,7 @@
     // Escape: Close Full Search Modal
     else if (e.key === 'Escape' || e.keyCode === 27) {
       var modal = document.getElementById('yaktube-full-search-modal');
-      if (modal && modal.style.display === 'flex') {
+      if (modal && modal.classList.contains('yaktube-modal-open')) {
         e.preventDefault();
         closeFullSearchModal();
       }

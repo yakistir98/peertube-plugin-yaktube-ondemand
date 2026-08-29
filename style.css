@@ -412,7 +412,8 @@ my-header .action-buttons {
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
-/* YOUTUBE FULL SEARCH & VOICE MODAL (v1.3.1 - Sleek Trigger Pill)            */
+/* -------------------------------------------------------------------------- */
+/* YOUTUBE FULL SEARCH & VOICE MODAL (v1.3.3 - Display Fix)                   */
 /* -------------------------------------------------------------------------- */
 
 /* Header Search Trigger Container */
@@ -522,11 +523,15 @@ my-search-typeahead,
   background: rgba(0, 0, 0, 0.82) !important;
   backdrop-filter: blur(12px) !important;
   z-index: 999999 !important;
-  display: flex !important;
+  display: none;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: flex-start !important;
   padding-top: 40px !important;
+}
+
+.yaktube-full-search-modal.yaktube-modal-open {
+  display: flex !important;
   animation: yaktube-fade-in 0.2s ease-out !important;
 }
 
