@@ -1405,7 +1405,8 @@
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.1)
+  // --------------------------------------------------------------------------
+  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.2 - Clean Generic Labels)
   // --------------------------------------------------------------------------
   var activeVoiceRec = null;
   var isVoiceListening = false;
@@ -1427,9 +1428,7 @@
       '<div class="yaktube-modal-search-bar">' +
       '<button id="yaktube-modal-back-btn" class="yaktube-modal-back-btn" aria-label="Aramadan Çık (Escape)" title="Aramadan Çık (Escape)">←</button>' +
       '<div class="yaktube-modal-input-wrap">' +
-      '<input id="yaktube-modal-input" type="search" placeholder="' +
-      getInstanceName() +
-      ' ve YouTube\'da arayın..." aria-label="Arama Metni">' +
+      '<input id="yaktube-modal-input" type="search" placeholder="Video veya kanal ara..." aria-label="Arama Metni">' +
       '<button id="yaktube-modal-clear-btn" class="yaktube-modal-clear-btn" aria-label="Metni Temizle">✕</button>' +
       '</div>' +
       '<button id="yaktube-modal-submit-btn" class="yaktube-modal-search-action-btn" aria-label="Ara">🔍 Ara</button>' +
@@ -1659,7 +1658,7 @@
     if (searchContainer.hasAttribute('data-yaktube-trigger-styled')) return;
     searchContainer.setAttribute('data-yaktube-trigger-styled', 'true');
 
-    // Hide original native inputs to prevent typing outside modal and avoid clutter
+    // Hide original native inputs
     searchInp.style.display = 'none';
     searchInp.setAttribute('tabindex', '-1');
     searchInp.setAttribute('aria-hidden', 'true');
@@ -1687,14 +1686,12 @@
       triggerPill = document.createElement('button');
       triggerPill.type = 'button';
       triggerPill.className = 'yaktube-search-trigger-pill';
-      triggerPill.setAttribute('aria-label', getInstanceName() + " ve YouTube'da Arama Yap (Açmak için tıklayın)");
-      triggerPill.setAttribute('title', 'Arama Penceresini Aç (/)');
+      triggerPill.setAttribute('aria-label', 'Ara');
+      triggerPill.setAttribute('title', 'Arama Yap (/)');
 
       triggerPill.innerHTML =
         '<span class="yaktube-search-trigger-icon">🔍</span>' +
-        '<span class="yaktube-search-trigger-text">' +
-        getInstanceName() +
-        " ve YouTube'da arayın...</span>" +
+        '<span class="yaktube-search-trigger-text">Ara...</span>' +
         '<span class="yaktube-search-trigger-shortcut">/</span>';
 
       outerWrap.appendChild(triggerPill);
