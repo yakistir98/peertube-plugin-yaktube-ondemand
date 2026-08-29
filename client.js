@@ -1401,7 +1401,8 @@
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. YOUTUBE-IDENTICAL SEARCH BAR & VOICE MODAL ENGINE (v1.2.2)
+  // --------------------------------------------------------------------------
+  // 8. YOUTUBE-IDENTICAL SEARCH BAR & VOICE MODAL ENGINE (v1.2.3 - Universal)
   // --------------------------------------------------------------------------
   var activeVoiceRecognition = null;
   var isVoiceListeningActive = false;
@@ -1607,33 +1608,22 @@
     searchInp.setAttribute('data-yaktube-yt-styled', 'true');
     searchInp.setAttribute('aria-label', getInstanceName() + ' Video Arama');
 
-    // 1. Back button for Mobile Navigation (←)
-    var backBtn = searchContainer.querySelector('.yaktube-search-back-btn');
-    if (!backBtn) {
-      backBtn = document.createElement('button');
-      backBtn.type = 'button';
-      backBtn.className = 'yaktube-search-back-btn';
-      backBtn.setAttribute('aria-label', 'Aramadan Çık');
-      backBtn.setAttribute('title', 'Aramadan Çık');
-      backBtn.innerHTML = '←';
-      searchContainer.prepend(backBtn);
-
-      backBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        document.body.classList.remove('yaktube-mobile-search-active');
-        searchInp.blur();
-        announce('Arama kapatıldı.');
-      });
+    // 1. Create Outer Wrapper
+    var outerWrap = searchContainer.querySelector('.yaktube-search-outer-wrap');
+    if (!outerWrap) {
+      outerWrap = document.createElement('div');
+      outerWrap.className = 'yaktube-search-outer-wrap';
+      searchInp.parentNode.insertBefore(outerWrap, searchInp);
     }
 
-    // 2. Wrap input inside YouTube Pill Container
-    var pillWrapper = searchInp.closest('.yaktube-search-pill-wrapper');
+    // 2. Create Pill Box
+    var pillWrapper = outerWrap.querySelector('.yaktube-search-pill-wrapper');
     if (!pillWrapper) {
       pillWrapper = document.createElement('div');
       pillWrapper.className = 'yaktube-search-pill-wrapper';
+      outerWrap.appendChild(pillWrapper);
 
-      searchInp.parentNode.insertBefore(pillWrapper, searchInp);
+      // Move Input Inside Pill
       pillWrapper.appendChild(searchInp);
 
       // Add Clear Button (✕)
@@ -1644,6 +1634,15 @@
       clearBtn.innerHTML = '✕';
       pillWrapper.appendChild(clearBtn);
 
+      // Add Search Submit Button (🔍)
+      var submitBtn = document.createElement('button');
+      submitBtn.type = 'submit';
+      submitBtn.className = 'yaktube-search-submit-btn';
+      submitBtn.setAttribute('aria-label', 'Ara');
+      submitBtn.setAttribute('title', 'Ara');
+      submitBtn.innerHTML = '🔍';
+      pillWrapper.appendChild(submitBtn);
+
       function updateClearState() {
         if (searchInp.value && searchInp.value.trim().length > 0) {
           clearBtn.style.display = 'inline-flex';
@@ -1653,12 +1652,7 @@
       }
 
       searchInp.addEventListener('input', updateClearState);
-      searchInp.addEventListener('focus', function () {
-        updateClearState();
-        if (window.innerWidth <= 768) {
-          document.body.classList.add('yaktube-mobile-search-active');
-        }
-      });
+      searchInp.addEventListener('focus', updateClearState);
 
       clearBtn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -1670,10 +1664,22 @@
         searchInp.focus();
         announce('Arama kutusu temizlendi.');
       });
+
+      submitBtn.addEventListener('click', function (e) {
+        var query = (searchInp.value || '').trim();
+        if (query) {
+          var form = searchInp.closest('form');
+          if (form) {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          } else {
+            window.location.href = '/search/videos?search=' + encodeURIComponent(query);
+          }
+        }
+      });
     }
 
-    // 3. Single YouTube Circular Voice Button (🎙️) Beside Search Box
-    var voiceBtn = searchContainer.querySelector('.yaktube-voice-search-btn');
+    // 3. YouTube Circular Voice Button (🎙️) Beside the Pill Box
+    var voiceBtn = outerWrap.querySelector('.yaktube-voice-search-btn');
     if (!voiceBtn) {
       voiceBtn = document.createElement('button');
       voiceBtn.type = 'button';
@@ -1682,7 +1688,7 @@
       voiceBtn.setAttribute('title', 'Sesle Ara (Shift+V)');
       voiceBtn.innerHTML = '🎙️';
 
-      searchContainer.appendChild(voiceBtn);
+      outerWrap.appendChild(voiceBtn);
 
       voiceBtn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -1699,7 +1705,6 @@
           searchInp.dispatchEvent(new Event('input', { bubbles: true }));
           announce('Arama metni temizlendi.');
         } else {
-          document.body.classList.remove('yaktube-mobile-search-active');
           searchInp.blur();
           announce('Arama kutusundan çıkıldı.');
         }
@@ -1718,16 +1723,27 @@
       }
     });
 
+    var headerInputs = document.querySelectorAll('my-header input');
+    headerInputs.forEach(function (inp) {
+      var parent = inp.closest('my-search-typeahead') || inp.parentElement;
+      if (
+        parent &&
+        (inp.type === 'search' ||
+          inp.type === 'text' ||
+          (inp.placeholder && inp.placeholder.toLowerCase().includes('ara')))
+      ) {
+        transformToYouTubeSearchBar(inp, parent);
+      }
+    });
+
     // Clean up repetitive card titles and strange relative date buttons
     document.querySelectorAll('my-video-miniature, .video-miniature').forEach(function (card) {
-      // 1. Hide duplicate thumbnail links from screen reader so title link is read ONCE
       var thumbLink = card.querySelector('a.thumbnail-link, .video-thumbnail a, a.thumbnail');
       if (thumbLink && !thumbLink.hasAttribute('aria-hidden')) {
         thumbLink.setAttribute('aria-hidden', 'true');
         thumbLink.setAttribute('tabindex', '-1');
       }
 
-      // 2. Clean up date buttons (e.g. "Bu tarih birimini ... olarak değiştir")
       var dateBtn = card.querySelector('.video-date-line button, .video-date button, button[title*="tarih"]');
       if (dateBtn && !dateBtn.hasAttribute('data-cleaned')) {
         dateBtn.setAttribute('data-cleaned', 'true');
@@ -1750,20 +1766,12 @@
       );
       openYouTubeVoiceModal(searchInp);
     }
-    // Escape: Close Voice Modal or exit mobile search
+    // Escape: Close Voice Modal
     else if (e.key === 'Escape' || e.keyCode === 27) {
       var modal = document.getElementById('yaktube-voice-modal');
       if (modal && modal.style.display === 'flex') {
         e.preventDefault();
         closeYouTubeVoiceModal();
-      } else if (document.body.classList.contains('yaktube-mobile-search-active')) {
-        e.preventDefault();
-        document.body.classList.remove('yaktube-mobile-search-active');
-        var searchInp = document.querySelector(
-          'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
-        );
-        if (searchInp) searchInp.blur();
-        announce('Arama kapatıldı.');
       }
     }
     // / : Focus Search Input

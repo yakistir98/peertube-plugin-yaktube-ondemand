@@ -409,10 +409,10 @@ my-header .action-buttons {
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
-/* YOUTUBE-STYLE SEARCH BAR & VOICE SEARCH MODAL (v1.2.2 - A11y Optimized)    */
+/* -------------------------------------------------------------------------- */
+/* YOUTUBE-STYLE SEARCH BAR & VOICE SEARCH (v1.2.3 - Universal & Visible)     */
 /* -------------------------------------------------------------------------- */
 
-/* Header Search Container Pill Styling */
 my-search-typeahead,
 .search-container,
 .header-search {
@@ -422,6 +422,15 @@ my-search-typeahead,
   width: 100% !important;
   max-width: 580px !important;
   margin: 0 auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.yaktube-search-outer-wrap {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  position: relative !important;
 }
 
 .yaktube-search-pill-wrapper {
@@ -430,10 +439,11 @@ my-search-typeahead,
   background: #121212 !important;
   border: 1px solid #303030 !important;
   border-radius: 40px !important;
-  padding: 2px 10px 2px 14px !important;
+  padding: 0 0 0 14px !important;
   transition: all 0.2s ease !important;
   width: 100% !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+  overflow: hidden !important;
 }
 
 .yaktube-search-pill-wrapper:focus-within {
@@ -460,18 +470,18 @@ my-search-typeahead,
   font-size: 14px !important;
 }
 
-/* Clear Button Inside Pill */
+/* Clear Button Inside Pill (✕) */
 .yaktube-clear-search-btn {
   background: rgba(255, 255, 255, 0.12) !important;
   color: #aaa !important;
   border: none !important;
   border-radius: 50% !important;
-  width: 24px !important;
-  height: 24px !important;
+  width: 22px !important;
+  height: 22px !important;
   display: none;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   cursor: pointer !important;
   margin: 0 6px !important;
@@ -484,7 +494,28 @@ my-search-typeahead,
   color: #fff !important;
 }
 
-/* YouTube Circular Voice Button Beside Search Box */
+/* Search Submit Button on Right of Pill (🔍) */
+.yaktube-search-submit-btn {
+  background: #222222 !important;
+  color: #f1f1f1 !important;
+  border: none !important;
+  border-left: 1px solid #303030 !important;
+  padding: 8px 18px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.yaktube-search-submit-btn:hover {
+  background: #272727 !important;
+  color: #ff8f37 !important;
+}
+
+/* YouTube Circular Voice Button (🎙️) */
 .yaktube-voice-search-btn {
   background: #1f1f1f !important;
   color: #f1f1f1 !important;
@@ -508,16 +539,6 @@ my-search-typeahead,
   border-color: #ff8f37 !important;
   color: #ff8f37 !important;
   transform: scale(1.06) !important;
-}
-
-/* Hide back button on desktop */
-@media (min-width: 769px) {
-  .yaktube-search-back-btn {
-    display: none !important;
-  }
-  .yaktube-mobile-search-trigger {
-    display: none !important;
-  }
 }
 
 /* YouTube-Style Voice Search Modal Overlay */
@@ -667,43 +688,21 @@ my-search-typeahead,
   margin-top: 10px !important;
 }
 
-/* Mobile Search Overlay (< 768px) */
+/* Mobile Responsiveness */
 @media (max-width: 768px) {
-  body:not(.yaktube-mobile-search-active) my-search-typeahead,
-  body:not(.yaktube-mobile-search-active) .search-container {
-    display: none !important;
-  }
-
-  body.yaktube-mobile-search-active my-header .header-left,
-  body.yaktube-mobile-search-active my-header .header-right,
-  body.yaktube-mobile-search-active my-header .user-menu,
-  body.yaktube-mobile-search-active my-header .brand-name {
-    display: none !important;
-  }
-
-  body.yaktube-mobile-search-active my-search-typeahead,
-  body.yaktube-mobile-search-active .search-container {
-    width: 100% !important;
+  my-search-typeahead,
+  .search-container,
+  .header-search {
     max-width: 100% !important;
-    display: flex !important;
-    position: static !important;
-    margin: 0 !important;
-    z-index: 1000 !important;
+    padding: 0 4px !important;
   }
-
-  .yaktube-search-back-btn {
-    display: inline-flex !important;
-    background: transparent !important;
-    border: none !important;
-    color: #fff !important;
-    font-size: 22px !important;
-    width: 38px !important;
-    height: 38px !important;
-    border-radius: 50% !important;
-    align-items: center !important;
-    justify-content: center !important;
-    cursor: pointer !important;
-    margin-right: 6px !important;
-    flex-shrink: 0 !important;
+  .yaktube-search-submit-btn {
+    padding: 8px 12px !important;
+  }
+  .yaktube-voice-search-btn {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 16px !important;
+    margin-left: 4px !important;
   }
 }
