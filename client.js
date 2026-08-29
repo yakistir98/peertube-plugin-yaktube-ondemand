@@ -576,13 +576,13 @@
 
   setInterval(autoFixDOM, 1000);
 
-  // 3. Keyboard Shortcuts Modal
+  // 3. Keyboard Shortcuts Modal & Quick Info Engine (v1.4.0)
   function toggleShortcutsModal() {
     var modal = document.getElementById('yaktube-shortcuts-dialog');
     if (modal) {
       if (modal.style.display === 'none' || !modal.style.display) {
         modal.style.display = 'flex';
-        announce('Klavye kısayolları yardım penceresi açıldı. Kapatmak i�in Escape tuşuna basın.');
+        announce('Klavye kısayolları yardım penceresi açıldı. Kapatmak için Escape tuşuna basın.');
         var closeBtn = document.getElementById('yaktube-shortcuts-close');
         if (closeBtn) closeBtn.focus();
       } else {
@@ -597,35 +597,43 @@
       modal.setAttribute('aria-modal', 'true');
       modal.setAttribute('aria-labelledby', 'yaktube-shortcuts-title');
       modal.innerHTML =
-        '<div class="yaktube-modal-card" style="max-width: 520px;">' +
-        '<h3 id="yaktube-shortcuts-title" class="yaktube-modal-title" style="margin-top:0;">?? YakTube Klavye K�sayollar�</h3>' +
-        '<table class="yaktube-shortcuts-table">' +
-        '<thead><tr><th>Kısayol</th><th>İşlev</th></tr></thead>' +
+        '<div class="yaktube-modal-card" style="max-width: 560px; background:#1e1e24; border-radius:18px; padding:24px; color:#fff; box-shadow:0 16px 40px rgba(0,0,0,0.8);">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">' +
+        '<h3 id="yaktube-shortcuts-title" style="margin:0; font-size:18px; color:#ff8f37;">⌨️ Video Oynatıcı & Gezinme Kısayolları</h3>' +
+        '<button id="yaktube-shortcuts-close" class="yaktube-voice-modal-close-btn" aria-label="Kapat">✕</button>' +
+        '</div>' +
+        '<table class="yaktube-shortcuts-table" style="width:100%; border-collapse:collapse; font-size:13px;">' +
+        '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; color:#aaa;"><th style="padding:6px 0;">Kısayol</th><th style="padding:6px 0;">İşlev</th></tr></thead>' +
         '<tbody>' +
-        '<tr><td><span class="yaktube-kbd">Space</span> veya <span class="yaktube-kbd">K</span></td><td>Oynat / Duraklat</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">Sol Ok</span> veya <span class="yaktube-kbd">J</span></td><td>5 saniye geri sar</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">Sağ Ok</span> veya <span class="yaktube-kbd">L</span></td><td>5 saniye ileri sar</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">Yukarı / Aşağı Ok</span></td><td>Sesi %5 artır / azalt</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">M</span></td><td>Sesi Kapat / A� (Mute)</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">F</span></td><td>Tam Ekran</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">C</span></td><td>Altyazıları A� / Kapat</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">/</span> (Bölü)</td><td>Arama kutusuna hızlı git</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">0 - 9</span></td><td>Videonun %0 - %90 noktasına atla</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">?</span> (Shift+/)</td><td>Bu yardım kılavuzunu aç / kapat</td></tr>' +
-        '<tr><td><span class="yaktube-kbd">Esc</span></td><td>Pencereleri kapat</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Space</span> veya <span class="yaktube-kbd">K</span></td><td>Oynat / Duraklat</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">J</span> / <span class="yaktube-kbd">L</span></td><td>10 saniye geri / ileri sar</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Sol</span> / <span class="yaktube-kbd">Sağ Ok</span></td><td>5 saniye geri / ileri sar</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Yukarı</span> / <span class="yaktube-kbd">Aşağı Ok</span></td><td>Sesi %5 artır / azalt</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">M</span></td><td>Sesi Kapat / Aç (Mute)</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">F</span></td><td>Tam Ekran</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">T</span></td><td>Sinema / Tiyatro Modu</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">C</span></td><td>Altyazıları Aç / Kapat</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">I</span></td><td>Hızlı Video Bilgisi & İstatistikler</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">&gt;</span> / <span class="yaktube-kbd">&lt;</span> (Shift+.)</td><td>Oynatma hızını artır / azalt</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">0 - 9</span></td><td>Videonun %0 - %90 noktasına atla</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">/</span></td><td>Arama penceresini aç</td></tr>' +
+        '<tr><td style="padding:8px 0;"><span class="yaktube-kbd">Shift + V</span></td><td>Sesli aramayı başlat</td></tr>' +
         '</tbody>' +
         '</table>' +
-        '<button id="yaktube-shortcuts-close" class="yaktube-modal-close-btn" aria-label="Kılavuzu Kapat">Kılavuzu Kapat (Esc)</button>' +
         '</div>';
       document.body.appendChild(modal);
 
-      document.getElementById('yaktube-shortcuts-close').addEventListener('click', function () {
-        modal.style.display = 'none';
+      var closeBtn = modal.querySelector('#yaktube-shortcuts-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          modal.style.display = 'none';
+        });
+      }
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.style.display = 'none';
       });
 
-      var closeBtn = document.getElementById('yaktube-shortcuts-close');
-      if (closeBtn) closeBtn.focus();
-      announce('Klavye kısayolları yardım penceresi açıldı. Kapatmak i�in Escape tuşuna basın.');
+      announce('Klavye kısayolları yardım penceresi açıldı. Kapatmak için Escape tuşuna basın.');
     }
   }
 
@@ -648,7 +656,77 @@
     return mins + ' dakika ' + secs + ' saniye';
   }
 
-  // 4. Global Keydown Listener
+  function showQuickVideoInfo() {
+    var video = getVideoElement();
+    if (!video) {
+      announce('Şu anda aktif oynatılan bir video bulunmuyor.');
+      return;
+    }
+
+    var titleEl = document.querySelector('h1.video-title, .video-name, my-video-watch h1, .title');
+    var title = titleEl ? titleEl.textContent.trim() : 'Video';
+    var curTime = formatTime(video.currentTime);
+    var totalTime = formatTime(video.duration || 0);
+    var remaining = formatTime((video.duration || 0) - video.currentTime);
+    var speed = video.playbackRate + 'x';
+    var volume = Math.round(video.volume * 100) + '%';
+    var quality = video.videoHeight ? video.videoHeight + 'p' : 'Otomatik';
+
+    // Visual Toast
+    var existingToast = document.querySelector('.yaktube-video-info-toast');
+    if (existingToast) existingToast.remove();
+
+    var toast = document.createElement('div');
+    toast.className = 'yaktube-video-info-toast';
+    toast.innerHTML =
+      '<div class="yaktube-info-toast-title">📊 Video Bilgisi & Durum</div>' +
+      '<div class="yaktube-info-toast-row"><span>Başlık:</span> <b>' +
+      (title.length > 28 ? title.substring(0, 28) + '...' : title) +
+      '</b></div>' +
+      '<div class="yaktube-info-toast-row"><span>Konum / Süre:</span> <b>' +
+      curTime +
+      ' / ' +
+      totalTime +
+      '</b></div>' +
+      '<div class="yaktube-info-toast-row"><span>Kalan Süre:</span> <b>' +
+      remaining +
+      '</b></div>' +
+      '<div class="yaktube-info-toast-row"><span>Çözünürlük:</span> <b>' +
+      quality +
+      '</b></div>' +
+      '<div class="yaktube-info-toast-row"><span>Hız & Ses:</span> <b>' +
+      speed +
+      ' | ' +
+      volume +
+      '</b></div>';
+
+    document.body.appendChild(toast);
+    setTimeout(function () {
+      if (toast.parentElement) toast.remove();
+    }, 4000);
+
+    announce(
+      'Video Bilgisi: ' +
+        title +
+        '. Konum: ' +
+        curTime +
+        ', Toplam Süre: ' +
+        totalTime +
+        ', Kalan: ' +
+        remaining +
+        ', Oynatma Hızı: ' +
+        speed +
+        ', Ses: yüzde ' +
+        Math.round(video.volume * 100) +
+        ', Çözünürlük: ' +
+        quality,
+      true
+    );
+  }
+
+  var speedSteps = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+  // 4. Global Keydown Listener (Pro Video Player Engine)
   window.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       var shortcutsModal = document.getElementById('yaktube-shortcuts-dialog');
@@ -677,21 +755,6 @@
       }
     }
 
-    if (e.key === '/' && !isInputFocused()) {
-      e.preventDefault();
-      var searchInput =
-        document.querySelector('input[type="search"]') ||
-        document.querySelector('input[name="search"]') ||
-        document.querySelector('.search-input') ||
-        document.querySelector('input');
-      if (searchInput) {
-        searchInput.focus();
-        if (searchInput.select) searchInput.select();
-        announce('Arama kutusuna odaklanıldı.');
-      }
-      return;
-    }
-
     if (isInputFocused()) {
       return;
     }
@@ -701,6 +764,7 @@
 
     var key = e.key.toLowerCase();
 
+    // Play / Pause (Space / K)
     if (key === ' ' || key === 'k') {
       e.preventDefault();
       if (video.paused) {
@@ -710,15 +774,29 @@
         video.pause();
         announce('Video duraklatıldı.');
       }
-    } else if (key === 'j' || e.key === 'ArrowLeft') {
+    }
+    // Seek 10s Back / Forward (J / L)
+    else if (key === 'j') {
+      e.preventDefault();
+      video.currentTime = Math.max(0, video.currentTime - 10);
+      announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+    } else if (key === 'l') {
+      e.preventDefault();
+      video.currentTime = Math.min(video.duration || 99999, video.currentTime + 10);
+      announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+    }
+    // Seek 5s Back / Forward (Left / Right Arrow)
+    else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       video.currentTime = Math.max(0, video.currentTime - 5);
-      announce('5 saniye geri sarıldı. Åu an: ' + formatTime(video.currentTime));
-    } else if (key === 'l' || e.key === 'ArrowRight') {
+      announce('5 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+    } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       video.currentTime = Math.min(video.duration || 99999, video.currentTime + 5);
-      announce('5 saniye ileri sarıldı. Åu an: ' + formatTime(video.currentTime));
-    } else if (e.key === 'ArrowUp') {
+      announce('5 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+    }
+    // Volume Up / Down (Up / Down Arrow)
+    else if (e.key === 'ArrowUp') {
       e.preventDefault();
       video.volume = Math.min(1, video.volume + 0.05);
       announce('Ses seviyesi yüzde ' + Math.round(video.volume * 100));
@@ -726,11 +804,15 @@
       e.preventDefault();
       video.volume = Math.max(0, video.volume - 0.05);
       announce('Ses seviyesi yüzde ' + Math.round(video.volume * 100));
-    } else if (key === 'm') {
+    }
+    // Mute (M)
+    else if (key === 'm') {
       e.preventDefault();
       video.muted = !video.muted;
       announce(video.muted ? 'Ses kapatıldı (Sessiz).' : 'Ses açıldı.');
-    } else if (key === 'f') {
+    }
+    // Fullscreen (F)
+    else if (key === 'f') {
       e.preventDefault();
       if (!document.fullscreenElement) {
         var container = video.closest('.video-js') || video.parentElement || video;
@@ -740,7 +822,21 @@
         if (document.exitFullscreen) document.exitFullscreen();
         announce('Tam ekrandan çıkıldı.');
       }
-    } else if (key === 'c') {
+    }
+    // Theater Mode (T)
+    else if (key === 't') {
+      e.preventDefault();
+      document.body.classList.toggle('yaktube-theater-mode');
+      var isTheater = document.body.classList.contains('yaktube-theater-mode');
+      announce(isTheater ? 'Sinema modu açıldı.' : 'Sinema modundan çıkıldı.');
+    }
+    // Quick Video Info (I)
+    else if (key === 'i') {
+      e.preventDefault();
+      showQuickVideoInfo();
+    }
+    // Subtitles (C)
+    else if (key === 'c') {
       e.preventDefault();
       var tracks = video.textTracks;
       if (tracks && tracks.length > 0) {
@@ -750,12 +846,40 @@
       } else {
         announce('Bu videoda altyazı bulunmuyor.');
       }
-    } else if (key >= '0' && key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    }
+    // Speed Controls (< and > / Shift+, and Shift+.)
+    else if (e.key === '>' || (e.shiftKey && e.key === '.')) {
+      e.preventDefault();
+      var curSpeed = video.playbackRate || 1;
+      var nextIdx = speedSteps.findIndex(function (s) {
+        return s > curSpeed;
+      });
+      if (nextIdx !== -1) {
+        video.playbackRate = speedSteps[nextIdx];
+      } else {
+        video.playbackRate = 2;
+      }
+      announce('Oynatma hızı ' + video.playbackRate + ' katına çıkarıldı.');
+    } else if (e.key === '<' || (e.shiftKey && e.key === ',')) {
+      e.preventDefault();
+      var curSpeed = video.playbackRate || 1;
+      var prevSteps = speedSteps.filter(function (s) {
+        return s < curSpeed;
+      });
+      if (prevSteps.length > 0) {
+        video.playbackRate = prevSteps[prevSteps.length - 1];
+      } else {
+        video.playbackRate = 0.25;
+      }
+      announce('Oynatma hızı ' + video.playbackRate + ' katına düşürüldü.');
+    }
+    // Percentage Jumps (0 - 9)
+    else if (key >= '0' && key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
       var percent = parseInt(key, 10) * 10;
       if (video.duration) {
         video.currentTime = (video.duration * percent) / 100;
-        announce('Videonun yüzde ' + percent + ' noktasına atlandı. Åu an: ' + formatTime(video.currentTime));
+        announce('Videonun yüzde ' + percent + ' noktasına atlandı. Konum: ' + formatTime(video.currentTime));
       }
     }
   });

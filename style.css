@@ -768,3 +768,78 @@ my-search-typeahead,
   padding-top: 12px !important;
   margin-top: 8px !important;
 }
+
+/* -------------------------------------------------------------------------- */
+/* YOUTUBE THEATER MODE & QUICK VIDEO INFO TOAST (v1.4.0)                     */
+/* -------------------------------------------------------------------------- */
+
+/* Theater / Cinema Mode (T) */
+body.yaktube-theater-mode my-video-watch,
+body.yaktube-theater-mode .video-watch,
+body.yaktube-theater-mode .watch-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+
+body.yaktube-theater-mode .player-container,
+body.yaktube-theater-mode .video-player-container,
+body.yaktube-theater-mode .player-wrapper {
+  max-height: 82vh !important;
+  height: 82vh !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  background: #000 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  margin-bottom: 20px !important;
+}
+
+body.yaktube-theater-mode video,
+body.yaktube-theater-mode .video-js {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 82vh !important;
+}
+
+/* Quick Video Info Toast (I) */
+.yaktube-video-info-toast {
+  position: fixed !important;
+  top: 70px !important;
+  right: 20px !important;
+  background: rgba(20, 20, 26, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 143, 55, 0.4) !important;
+  border-radius: 14px !important;
+  padding: 16px 20px !important;
+  color: #fff !important;
+  font-size: 14px !important;
+  z-index: 99999 !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7) !important;
+  max-width: 380px !important;
+  animation: yaktube-fade-in 0.25s ease-out !important;
+  pointer-events: none !important;
+}
+
+.yaktube-info-toast-title {
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #ff8f37 !important;
+  margin-bottom: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.yaktube-info-toast-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  margin: 4px 0 !important;
+  font-size: 13px !important;
+  color: #ccc !important;
+}
+
+.yaktube-info-toast-row b {
+  color: #fff !important;
+}
