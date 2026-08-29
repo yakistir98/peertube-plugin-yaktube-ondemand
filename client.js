@@ -1397,6 +1397,232 @@
       });
   }
 
+  // --------------------------------------------------------------------------
+  // 8. VOICE SEARCH, CLEAR BUTTON & ACCESSIBLE SEARCH UX (YouTube Style)
+  // --------------------------------------------------------------------------
+  var activeRecognition = null;
+  var isVoiceListening = false;
+
+  function initVoiceSearch(searchInp, searchWrap) {
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var voiceBtn = searchWrap.querySelector('#yaktube-voice-search-btn');
+
+    if (!voiceBtn) {
+      voiceBtn = document.createElement('button');
+      voiceBtn.id = 'yaktube-voice-search-btn';
+      voiceBtn.type = 'button';
+      voiceBtn.className = 'yaktube-voice-search-btn';
+      voiceBtn.setAttribute('aria-label', 'Sesle Ara (Shift+V)');
+      voiceBtn.setAttribute('title', 'Sesle Ara (Shift+V)');
+      voiceBtn.innerHTML = '🎙️';
+      voiceBtn.style.cssText =
+        'background: rgba(255, 143, 55, 0.12); color: #ff8f37; border: 1px solid rgba(255, 143, 55, 0.35); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; margin-left: 6px; transition: all 0.2s ease; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.2);';
+
+      searchWrap.appendChild(voiceBtn);
+
+      voiceBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleVoiceSearch(searchInp, voiceBtn);
+      });
+    }
+
+    // Clear Button (✖️)
+    var clearBtn = searchWrap.querySelector('#yaktube-clear-search-btn');
+    if (!clearBtn) {
+      clearBtn = document.createElement('button');
+      clearBtn.id = 'yaktube-clear-search-btn';
+      clearBtn.type = 'button';
+      clearBtn.className = 'yaktube-clear-search-btn';
+      clearBtn.setAttribute('aria-label', 'Arama Metnini Temizle (Escape)');
+      clearBtn.setAttribute('title', 'Arama Metnini Temizle (Escape)');
+      clearBtn.innerHTML = '✕';
+      clearBtn.style.cssText =
+        'background: rgba(255, 255, 255, 0.12); color: #cbd5e1; border: none; border-radius: 50%; width: 22px; height: 22px; display: none; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; cursor: pointer; margin-right: 4px; transition: all 0.2s ease; flex-shrink: 0;';
+
+      searchInp.insertAdjacentElement('afterend', clearBtn);
+
+      clearBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        searchInp.value = '';
+        searchInp.dispatchEvent(new Event('input', { bubbles: true }));
+        searchInp.dispatchEvent(new Event('change', { bubbles: true }));
+        clearBtn.style.display = 'none';
+        searchInp.focus();
+        announce('Arama metni temizlendi.');
+      });
+    }
+
+    function updateClearBtnVisibility() {
+      if (searchInp.value && searchInp.value.trim().length > 0) {
+        clearBtn.style.display = 'inline-flex';
+      } else {
+        clearBtn.style.display = 'none';
+      }
+    }
+
+    searchInp.addEventListener('input', updateClearBtnVisibility);
+    searchInp.addEventListener('focus', updateClearBtnVisibility);
+    updateClearBtnVisibility();
+
+    // Escape Key Exit
+    searchInp.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        if (searchInp.value && searchInp.value.trim().length > 0) {
+          searchInp.value = '';
+          searchInp.dispatchEvent(new Event('input', { bubbles: true }));
+          clearBtn.style.display = 'none';
+          announce('Arama metni temizlendi.');
+        } else {
+          searchInp.blur();
+          announce('Arama kutusundan çıkıldı.');
+        }
+      }
+    });
+  }
+
+  function toggleVoiceSearch(searchInp, voiceBtn) {
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      announce('Tarayıcınız sesli arama özelliğini desteklemiyor. Lütfen Chrome veya Edge kullanın.');
+      return;
+    }
+
+    if (isVoiceListening) {
+      if (activeRecognition) {
+        try {
+          activeRecognition.stop();
+        } catch (err) {}
+      }
+      stopVoiceState(voiceBtn);
+      announce('Sesli arama durduruldu.');
+      return;
+    }
+
+    try {
+      activeRecognition = new SpeechRec();
+      activeRecognition.lang = navigator.language || 'tr-TR';
+      activeRecognition.continuous = false;
+      activeRecognition.interimResults = false;
+      activeRecognition.maxAlternatives = 1;
+
+      isVoiceListening = true;
+      voiceBtn.classList.add('yaktube-voice-recording');
+      voiceBtn.innerHTML = '🔴';
+      voiceBtn.setAttribute('aria-label', 'Dinleniyor... Konuşun (Durdurmak için tıklayın)');
+      announce('Sesli arama dinleniyor, lütfen aramak istediğiniz videoyu söyleyin...', true);
+
+      activeRecognition.onresult = function (ev) {
+        if (ev.results && ev.results[0] && ev.results[0][0]) {
+          var transcript = ev.results[0][0].transcript.trim();
+          if (transcript) {
+            searchInp.value = transcript;
+            searchInp.dispatchEvent(new Event('input', { bubbles: true }));
+            searchInp.dispatchEvent(new Event('change', { bubbles: true }));
+
+            announce('"' + transcript + '" için aranıyor...', true);
+
+            // Trigger search submission
+            var form = searchInp.closest('form');
+            if (form) {
+              form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            } else {
+              window.location.href = '/search/videos?search=' + encodeURIComponent(transcript);
+            }
+          }
+        }
+      };
+
+      activeRecognition.onerror = function (ev) {
+        console.warn('[YakTube] Voice search error:', ev.error);
+        if (ev.error === 'not-allowed') {
+          announce('Mikrofon izni verilmedi. Lütfen tarayıcı ayarlarından mikrofona izin verin.');
+        } else if (ev.error === 'no-speech') {
+          announce('Ses algılanamadı, lütfen tekrar deneyin.');
+        } else {
+          announce('Sesli arama sırasında bir sorun oluştu: ' + ev.error);
+        }
+        stopVoiceState(voiceBtn);
+      };
+
+      activeRecognition.onend = function () {
+        stopVoiceState(voiceBtn);
+      };
+
+      activeRecognition.start();
+    } catch (err) {
+      console.error('[YakTube] Failed to start speech recognition:', err);
+      announce('Sesli arama başlatılamadı.');
+      stopVoiceState(voiceBtn);
+    }
+  }
+
+  function stopVoiceState(voiceBtn) {
+    isVoiceListening = false;
+    if (voiceBtn) {
+      voiceBtn.classList.remove('yaktube-voice-recording');
+      voiceBtn.innerHTML = '🎙️';
+      voiceBtn.setAttribute('aria-label', 'Sesle Ara (Shift+V)');
+    }
+  }
+
+  function injectSearchEnhancements() {
+    var searchContainers = document.querySelectorAll(
+      'my-search-typeahead, .search-container, .header-search, my-header .search'
+    );
+    searchContainers.forEach(function (container) {
+      var searchInp = container.querySelector('input[type="search"], input[type="text"], input');
+      if (searchInp && !searchInp.hasAttribute('data-yaktube-enhanced')) {
+        searchInp.setAttribute('data-yaktube-enhanced', 'true');
+        initVoiceSearch(searchInp, container);
+      }
+    });
+
+    // Also check generic header inputs
+    var headerInputs = document.querySelectorAll('my-header input:not([data-yaktube-enhanced])');
+    headerInputs.forEach(function (inp) {
+      var parent = inp.parentElement;
+      if (
+        parent &&
+        (inp.type === 'search' ||
+          inp.type === 'text' ||
+          inp.placeholder.toLowerCase().includes('ara') ||
+          inp.placeholder.toLowerCase().includes('search'))
+      ) {
+        inp.setAttribute('data-yaktube-enhanced', 'true');
+        initVoiceSearch(inp, parent);
+      }
+    });
+  }
+
+  // Global Keyboard Shortcut: Shift+V for Voice Search, / for search focus
+  document.addEventListener('keydown', function (e) {
+    var activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+    var isInputActive = activeTag === 'input' || activeTag === 'textarea';
+
+    if (e.shiftKey && (e.key === 'V' || e.key === 'v') && !isInputActive) {
+      e.preventDefault();
+      var mainVoiceBtn = document.querySelector('#yaktube-voice-search-btn');
+      var searchInp = document.querySelector(
+        'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
+      );
+      if (mainVoiceBtn && searchInp) {
+        toggleVoiceSearch(searchInp, mainVoiceBtn);
+      }
+    } else if (e.key === '/' && !isInputActive && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      var searchInp = document.querySelector(
+        'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
+      );
+      if (searchInp) {
+        searchInp.focus();
+        searchInp.select();
+        announce('Arama kutusuna odaklanıldı.');
+      }
+    }
+  });
+
   // 7.5. Reactive Hybrid Related Videos Engine (Watch Page)
   var currentActiveVideoKey = null;
   var isFetchingRelated = false;
@@ -2039,6 +2265,7 @@
 
   setInterval(function () {
     checkAndInjectSearchResults();
+    injectSearchEnhancements();
     checkAndInjectRelatedVideos(false);
     restoreActiveLiveStream();
     checkAndInjectWatchPageComments();

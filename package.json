@@ -1,6 +1,6 @@
 {
   "name": "peertube-plugin-yaktube-ondemand",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Accessible On-Demand YouTube Import, Live Streams, Smart Recommendations and A11y Engine for PeerTube",
   "main": "main.js",
   "clientScripts": [
@@ -27,7 +27,11 @@
     "accessibility",
     "a11y",
     "screen-reader",
-    "fediverse"
+    "fediverse",
+    "voice-search",
+    "speech-recognition",
+    "speech-to-text",
+    "clear-search"
   ],
   "author": "Enes Yakıştır <yakistir98@gmail.com>",
   "repository": {
