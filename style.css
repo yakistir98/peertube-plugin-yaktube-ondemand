@@ -407,16 +407,30 @@ my-header .action-buttons {
 }
 
 /* -------------------------------------------------------------------------- */
-/* YOUTUBE-STYLE SEARCH BAR & VOICE SEARCH MODAL (v1.2.0)                     */
+/* -------------------------------------------------------------------------- */
+/* YOUTUBE-STYLE SEARCH BAR & VOICE SEARCH MODAL (v1.2.1)                     */
 /* -------------------------------------------------------------------------- */
 
-/* Header Search Container Pill Styling */
-my-search-typeahead,
-.search-container,
-.header-search {
-  display: flex !important;
-  align-items: center !important;
-  position: relative !important;
+/* Desktop & Common Pill Styling */
+@media (min-width: 769px) {
+  my-search-typeahead,
+  .search-container,
+  .header-search {
+    display: flex !important;
+    align-items: center !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 580px !important;
+    margin: 0 auto !important;
+  }
+
+  .yaktube-search-back-btn {
+    display: none !important;
+  }
+
+  .yaktube-mobile-search-trigger {
+    display: none !important;
+  }
 }
 
 .yaktube-search-pill-wrapper {
@@ -428,7 +442,6 @@ my-search-typeahead,
   padding: 2px 6px 2px 14px !important;
   transition: all 0.2s ease !important;
   width: 100% !important;
-  max-width: 580px !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4) !important;
 }
 
@@ -675,36 +688,57 @@ my-search-typeahead,
   margin-top: 10px !important;
 }
 
-/* Mobile Search Overlay Mode */
+/* -------------------------------------------------------------------------- */
+/* MOBILE SEARCH OVERLAY MODE (< 768px)                                       */
+/* -------------------------------------------------------------------------- */
 @media (max-width: 768px) {
-  body.yaktube-mobile-search-active my-header .header-left,
-  body.yaktube-mobile-search-active my-header .header-right,
-  body.yaktube-mobile-search-active my-header .user-menu {
+  /* Default Mobile State: Hide Full Search Input */
+  body:not(.yaktube-mobile-search-active) my-search-typeahead,
+  body:not(.yaktube-mobile-search-active) .search-container,
+  body:not(.yaktube-mobile-search-active) .header-search {
     display: none !important;
   }
+
+  .yaktube-mobile-search-trigger {
+    display: inline-flex !important;
+  }
+
+  /* Active Mobile Search Overlay: Full Width Bar */
+  body.yaktube-mobile-search-active my-header {
+    padding: 0 8px !important;
+    position: relative !important;
+  }
+
+  body.yaktube-mobile-search-active my-header .header-left,
+  body.yaktube-mobile-search-active my-header .header-right,
+  body.yaktube-mobile-search-active my-header .user-menu,
+  body.yaktube-mobile-search-active my-header .brand-name {
+    display: none !important;
+  }
+
   body.yaktube-mobile-search-active my-search-typeahead,
   body.yaktube-mobile-search-active .search-container {
     width: 100% !important;
     max-width: 100% !important;
     display: flex !important;
+    position: static !important;
+    margin: 0 !important;
+    z-index: 1000 !important;
   }
+
   .yaktube-search-back-btn {
     display: inline-flex !important;
+    background: transparent !important;
+    border: none !important;
+    color: #fff !important;
+    font-size: 22px !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 50% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    margin-right: 6px !important;
+    flex-shrink: 0 !important;
   }
-}
-
-.yaktube-search-back-btn {
-  display: none;
-  background: transparent !important;
-  border: none !important;
-  color: #fff !important;
-  font-size: 20px !important;
-  width: 36px !important;
-  height: 36px !important;
-  border-radius: 50% !important;
-  align-items: center !important;
-  justify-content: center !important;
-  cursor: pointer !important;
-  margin-right: 8px !important;
-  flex-shrink: 0 !important;
 }

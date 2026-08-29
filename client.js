@@ -1399,7 +1399,8 @@
 
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. YOUTUBE-IDENTICAL SEARCH BAR & VOICE MODAL ENGINE (v1.2.0)
+  // --------------------------------------------------------------------------
+  // 8. YOUTUBE-IDENTICAL SEARCH BAR & VOICE MODAL ENGINE (v1.2.1)
   // --------------------------------------------------------------------------
   var activeVoiceRecognition = null;
   var isVoiceListeningActive = false;
@@ -1611,11 +1612,13 @@
       backBtn.type = 'button';
       backBtn.className = 'yaktube-search-back-btn';
       backBtn.setAttribute('aria-label', 'Aramadan Çık (Geri)');
+      backBtn.setAttribute('title', 'Aramadan Çık (Geri)');
       backBtn.innerHTML = '←';
       searchContainer.prepend(backBtn);
 
       backBtn.addEventListener('click', function (e) {
         e.preventDefault();
+        e.stopPropagation();
         document.body.classList.remove('yaktube-mobile-search-active');
         searchInp.blur();
         announce('Arama kapatıldı.');
@@ -1658,7 +1661,9 @@
       searchInp.addEventListener('input', updateClearState);
       searchInp.addEventListener('focus', function () {
         updateClearState();
-        document.body.classList.add('yaktube-mobile-search-active');
+        if (window.innerWidth <= 768) {
+          document.body.classList.add('yaktube-mobile-search-active');
+        }
       });
 
       clearBtn.addEventListener('click', function (e) {
@@ -1720,7 +1725,67 @@
     });
   }
 
+  function injectMobileSearchTrigger() {
+    var headerRight =
+      document.querySelector('my-header .header-right') ||
+      document.querySelector('my-header .buttons-container') ||
+      document.querySelector('my-header .user-menu');
+    if (!headerRight) return;
+
+    var triggerBtn = headerRight.querySelector('#yaktube-mobile-search-open-btn');
+    if (!triggerBtn) {
+      triggerBtn = document.createElement('button');
+      triggerBtn.id = 'yaktube-mobile-search-open-btn';
+      triggerBtn.type = 'button';
+      triggerBtn.className = 'yaktube-mobile-search-trigger';
+      triggerBtn.setAttribute('aria-label', 'Aramayı Aç');
+      triggerBtn.setAttribute('title', 'Aramayı Aç');
+      triggerBtn.innerHTML = '🔍';
+      triggerBtn.style.cssText =
+        'background: transparent; color: #fff; border: none; font-size: 18px; width: 38px; height: 38px; border-radius: 50%; display: none; align-items: center; justify-content: center; cursor: pointer; margin-right: 4px;';
+      headerRight.prepend(triggerBtn);
+
+      triggerBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.body.classList.add('yaktube-mobile-search-active');
+        var searchInp = document.querySelector(
+          'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
+        );
+        if (searchInp) {
+          searchInp.focus();
+        }
+        announce('Arama ekranı açıldı.');
+      });
+    }
+
+    var mobileVoiceTrigger = headerRight.querySelector('#yaktube-mobile-voice-open-btn');
+    if (!mobileVoiceTrigger) {
+      mobileVoiceTrigger = document.createElement('button');
+      mobileVoiceTrigger.id = 'yaktube-mobile-voice-open-btn';
+      mobileVoiceTrigger.type = 'button';
+      mobileVoiceTrigger.className = 'yaktube-mobile-search-trigger';
+      mobileVoiceTrigger.setAttribute('aria-label', 'Sesli Arama');
+      mobileVoiceTrigger.setAttribute('title', 'Sesli Arama');
+      mobileVoiceTrigger.innerHTML = '🎙️';
+      mobileVoiceTrigger.style.cssText =
+        'background: transparent; color: #fff; border: none; font-size: 18px; width: 38px; height: 38px; border-radius: 50%; display: none; align-items: center; justify-content: center; cursor: pointer; margin-right: 4px;';
+      headerRight.insertBefore(mobileVoiceTrigger, triggerBtn.nextSibling);
+
+      mobileVoiceTrigger.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var searchInp = document.querySelector(
+          'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
+        );
+        openYouTubeVoiceModal(searchInp);
+      });
+    }
+  }
+
   function injectSearchEnhancements() {
+    injectMobileSearchTrigger();
+
     var searchContainers = document.querySelectorAll(
       'my-search-typeahead, .search-container, .header-search, my-header .search'
     );
@@ -1758,17 +1823,26 @@
       );
       openYouTubeVoiceModal(searchInp);
     }
-    // Escape: Close Voice Modal if open
+    // Escape: Close Voice Modal or exit mobile search
     else if (e.key === 'Escape' || e.keyCode === 27) {
       var modal = document.getElementById('yaktube-voice-modal');
       if (modal && modal.style.display === 'flex') {
         e.preventDefault();
         closeYouTubeVoiceModal();
+      } else if (document.body.classList.contains('yaktube-mobile-search-active')) {
+        e.preventDefault();
+        document.body.classList.remove('yaktube-mobile-search-active');
+        var searchInp = document.querySelector(
+          'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
+        );
+        if (searchInp) searchInp.blur();
+        announce('Arama kapatıldı.');
       }
     }
     // / : Focus Search Input
     else if (e.key === '/' && !isInputActive && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
+      document.body.classList.add('yaktube-mobile-search-active');
       var searchInp = document.querySelector(
         'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
       );
