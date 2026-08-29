@@ -1402,7 +1402,8 @@
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. YOUTUBE-IDENTICAL SEARCH BAR & VOICE MODAL ENGINE (v1.2.3 - Universal)
+  // --------------------------------------------------------------------------
+  // 8. YOUTUBE-IDENTICAL SEARCH BAR & BULLETPROOF VOICE MODAL (v1.2.4)
   // --------------------------------------------------------------------------
   var activeVoiceRecognition = null;
   var isVoiceListeningActive = false;
@@ -1421,21 +1422,21 @@
     modal.style.display = 'none';
 
     modal.innerHTML =
-      '<div class="yaktube-voice-modal-card">' +
-      '<div class="yaktube-voice-modal-header">' +
-      '<h2 id="yaktube-voice-modal-title" class="yaktube-voice-modal-title">Sesle arama yapın</h2>' +
-      '<button id="yaktube-voice-modal-close" class="yaktube-voice-modal-close-btn" aria-label="Sesli aramayı kapat">✕</button>' +
+      '<div class="yaktube-voice-modal-card" style="background:#212121; border-radius:16px; width:90%; max-width:540px; padding:24px; box-shadow:0 16px 40px rgba(0,0,0,0.8); color:#fff; position:relative;">' +
+      '<div class="yaktube-voice-modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">' +
+      '<h2 id="yaktube-voice-modal-title" style="font-size:20px; font-weight:600; margin:0; color:#f1f1f1;">Sesle arama yapın</h2>' +
+      '<button id="yaktube-voice-modal-close" class="yaktube-voice-modal-close-btn" style="background:transparent; border:none; color:#aaa; font-size:22px; cursor:pointer; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;" aria-label="Sesli aramayı kapat">✕</button>' +
       '</div>' +
-      '<div class="yaktube-voice-modal-body">' +
-      '<div id="yaktube-voice-status-text" class="yaktube-voice-status-text">Dinleniyor...</div>' +
-      '<div id="yaktube-voice-transcript-preview" class="yaktube-voice-transcript-preview"></div>' +
-      '<div class="yaktube-voice-mic-wrapper">' +
-      '<button id="yaktube-voice-mic-pulse-btn" class="yaktube-voice-mic-pulse-btn" aria-label="Mikrofonu durdur veya başlat">' +
+      '<div class="yaktube-voice-modal-body" style="text-align:center; padding:10px 0 15px 0;">' +
+      '<div id="yaktube-voice-status-text" style="font-size:22px; font-weight:700; color:#f1f1f1; margin-bottom:12px; min-height:30px;">Dinleniyor...</div>' +
+      '<div id="yaktube-voice-transcript-preview" style="font-size:16px; color:#ff8f37; font-weight:600; margin-bottom:24px; min-height:24px; word-break:break-word;"></div>' +
+      '<div class="yaktube-voice-mic-wrapper" style="position:relative; display:inline-flex; align-items:center; justify-content:center; margin:10px 0 20px 0;">' +
+      '<button id="yaktube-voice-mic-pulse-btn" class="yaktube-voice-mic-pulse-btn" style="background:#cc0000; color:#fff; border:none; border-radius:50%; width:76px; height:76px; font-size:34px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(204,0,0,0.5); z-index:2;" aria-label="Mikrofonu durdur veya başlat">' +
       '🎙️' +
       '</button>' +
-      '<div id="yaktube-voice-ripple" class="yaktube-voice-ripple"></div>' +
+      '<div id="yaktube-voice-ripple" class="yaktube-voice-ripple" style="position:absolute; width:76px; height:76px; border-radius:50%; background:rgba(204,0,0,0.4); animation:yaktube-ripple-wave 1.6s infinite ease-out; z-index:1;"></div>' +
       '</div>' +
-      '<div class="yaktube-voice-hint-text">Aramak istediğiniz sanatçıyı, şarkıyı veya konuyu söyleyin.</div>' +
+      '<div class="yaktube-voice-hint-text" style="font-size:13px; color:#888; margin-top:10px;">Aramak istediğiniz sanatçıyı, şarkıyı veya konuyu söyleyin.</div>' +
       '</div>' +
       '</div>';
 
@@ -1443,7 +1444,9 @@
 
     var closeBtn = modal.querySelector('#yaktube-voice-modal-close');
     if (closeBtn) {
-      closeBtn.addEventListener('click', function () {
+      closeBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         closeYouTubeVoiceModal();
       });
     }
@@ -1456,7 +1459,9 @@
 
     var pulseBtn = modal.querySelector('#yaktube-voice-mic-pulse-btn');
     if (pulseBtn) {
-      pulseBtn.addEventListener('click', function () {
+      pulseBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         if (isVoiceListeningActive) {
           stopVoiceRecognition();
         } else {
@@ -1469,19 +1474,30 @@
   }
 
   function openYouTubeVoiceModal(targetInput) {
-    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRec) {
-      announce(
-        'Tarayıcınız sesli arama özelliğini desteklemiyor. Lütfen Chrome, Edge veya güncel bir mobil tarayıcı kullanın.'
-      );
-      return;
-    }
+    modalTargetInput =
+      targetInput ||
+      document.querySelector('my-search-typeahead input, my-header input[type="search"], input[type="search"]');
 
     var modal = createYouTubeVoiceModal();
     modal.style.display = 'flex';
+
+    var statusText = modal.querySelector('#yaktube-voice-status-text');
+    var transcriptPreview = modal.querySelector('#yaktube-voice-transcript-preview');
+    if (statusText) statusText.textContent = 'Dinleniyor...';
+    if (transcriptPreview) transcriptPreview.textContent = '';
+
     announce('Sesli arama penceresi açıldı. Dinleniyor, lütfen aramak istediğiniz videoyu söyleyin.', true);
 
-    modalTargetInput = targetInput;
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      if (statusText) statusText.textContent = 'Tarayıcıda Ses Tanıma Desteklenmiyor';
+      var hint = modal.querySelector('.yaktube-voice-hint-text');
+      if (hint) hint.textContent = 'Lütfen sesli arama için Google Chrome veya Microsoft Edge kullanın.';
+      stopVoiceRecognition();
+      announce('Tarayıcınız sesli arama özelliğini desteklemiyor. Lütfen Chrome veya Edge kullanın.');
+      return;
+    }
+
     startVoiceRecognition();
 
     var closeBtn = modal.querySelector('#yaktube-voice-modal-close');
@@ -1492,7 +1508,7 @@
     var modal = document.getElementById('yaktube-voice-modal');
     if (modal) modal.style.display = 'none';
     stopVoiceRecognition();
-    announce('Sesli arama kapatıldı.');
+    announce('Sesli arama penceresi kapatıldı.');
   }
 
   function startVoiceRecognition() {
@@ -1513,7 +1529,10 @@
 
     if (statusText) statusText.textContent = 'Dinleniyor...';
     if (transcriptPreview) transcriptPreview.textContent = '';
-    if (micBtn) micBtn.classList.remove('yaktube-idle-mic');
+    if (micBtn) {
+      micBtn.style.background = '#cc0000';
+      micBtn.style.boxShadow = '0 4px 20px rgba(204,0,0,0.5)';
+    }
     if (ripple) ripple.style.display = 'block';
 
     try {
@@ -1561,7 +1580,7 @@
             statusText.textContent = 'Ses Algılanamadı';
             announce('Ses algılanamadı, tekrar denemek için mikrofona dokunun.');
           } else {
-            statusText.textContent = 'Bir sorun oluştu';
+            statusText.textContent = 'Tekrar Deneyin';
           }
         }
         stopVoiceRecognition();
@@ -1595,7 +1614,10 @@
       var ripple = modal.querySelector('#yaktube-voice-ripple');
       var statusText = modal.querySelector('#yaktube-voice-status-text');
 
-      if (micBtn) micBtn.classList.add('yaktube-idle-mic');
+      if (micBtn) {
+        micBtn.style.background = '#333';
+        micBtn.style.boxShadow = 'none';
+      }
       if (ripple) ripple.style.display = 'none';
       if (statusText && statusText.textContent === 'Dinleniyor...') {
         statusText.textContent = 'Mikrofona dokunup konuşun';

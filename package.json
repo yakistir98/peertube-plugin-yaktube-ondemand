@@ -1,6 +1,6 @@
 {
   "name": "peertube-plugin-yaktube-ondemand",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Accessible On-Demand YouTube Import, Live Streams, Smart Recommendations and A11y Engine for PeerTube",
   "main": "main.js",
   "clientScripts": [
