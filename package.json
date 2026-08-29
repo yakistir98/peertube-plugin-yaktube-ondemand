@@ -1,0 +1,39 @@
+{
+  "name": "peertube-plugin-yaktube-ondemand",
+  "version": "1.0.0",
+  "description": "Accessible On-Demand YouTube Import, Live Streams, Smart Recommendations and A11y Engine for PeerTube",
+  "main": "main.js",
+  "clientScripts": [
+    {
+      "scopes": [
+        "common"
+      ],
+      "script": "client.js"
+    }
+  ],
+  "css": [
+    "style.css"
+  ],
+  "engine": {
+    "peertube": ">=5.0.0"
+  },
+  "keywords": [
+    "peertube",
+    "peertube-plugin",
+    "ondemand",
+    "youtube",
+    "yt-dlp",
+    "recommendations",
+    "accessibility",
+    "a11y",
+    "screen-reader",
+    "fediverse"
+  ],
+  "author": "Enes Yakıştır <yakistir98@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enesyakistir/peertube-plugin-yaktube-ondemand.git"
+  },
+  "homepage": "https://yaktube.yakhub.com.tr",
+  "license": "AGPL-3.0-or-later"
+}
