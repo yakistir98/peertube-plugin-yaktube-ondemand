@@ -1403,232 +1403,260 @@
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. YOUTUBE-IDENTICAL SEARCH BAR & BULLETPROOF VOICE MODAL (v1.2.4)
   // --------------------------------------------------------------------------
-  var activeVoiceRecognition = null;
-  var isVoiceListeningActive = false;
-  var modalTargetInput = null;
+  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.0)
+  // --------------------------------------------------------------------------
+  var activeVoiceRec = null;
+  var isVoiceListening = false;
 
-  function createYouTubeVoiceModal() {
-    var existingModal = document.getElementById('yaktube-voice-modal');
+  function createFullSearchModal() {
+    var existingModal = document.getElementById('yaktube-full-search-modal');
     if (existingModal) return existingModal;
 
     var modal = document.createElement('div');
-    modal.id = 'yaktube-voice-modal';
-    modal.className = 'yaktube-voice-modal-overlay';
+    modal.id = 'yaktube-full-search-modal';
+    modal.className = 'yaktube-full-search-modal';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-labelledby', 'yaktube-voice-modal-title');
+    modal.setAttribute('aria-labelledby', 'yaktube-modal-search-title');
     modal.style.display = 'none';
 
     modal.innerHTML =
-      '<div class="yaktube-voice-modal-card" style="background:#212121; border-radius:16px; width:90%; max-width:540px; padding:24px; box-shadow:0 16px 40px rgba(0,0,0,0.8); color:#fff; position:relative;">' +
-      '<div class="yaktube-voice-modal-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">' +
-      '<h2 id="yaktube-voice-modal-title" style="font-size:20px; font-weight:600; margin:0; color:#f1f1f1;">Sesle arama yapın</h2>' +
-      '<button id="yaktube-voice-modal-close" class="yaktube-voice-modal-close-btn" style="background:transparent; border:none; color:#aaa; font-size:22px; cursor:pointer; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;" aria-label="Sesli aramayı kapat">✕</button>' +
+      '<div class="yaktube-modal-search-card">' +
+      '<div class="yaktube-modal-search-bar">' +
+      '<button id="yaktube-modal-back-btn" class="yaktube-modal-back-btn" aria-label="Aramadan Çık (Escape)" title="Aramadan Çık (Escape)">←</button>' +
+      '<div class="yaktube-modal-input-wrap">' +
+      '<input id="yaktube-modal-input" type="search" placeholder="' +
+      getInstanceName() +
+      ' ve YouTube\'da arayın..." aria-label="Arama Metni">' +
+      '<button id="yaktube-modal-clear-btn" class="yaktube-modal-clear-btn" aria-label="Metni Temizle">✕</button>' +
       '</div>' +
-      '<div class="yaktube-voice-modal-body" style="text-align:center; padding:10px 0 15px 0;">' +
-      '<div id="yaktube-voice-status-text" style="font-size:22px; font-weight:700; color:#f1f1f1; margin-bottom:12px; min-height:30px;">Dinleniyor...</div>' +
-      '<div id="yaktube-voice-transcript-preview" style="font-size:16px; color:#ff8f37; font-weight:600; margin-bottom:24px; min-height:24px; word-break:break-word;"></div>' +
-      '<div class="yaktube-voice-mic-wrapper" style="position:relative; display:inline-flex; align-items:center; justify-content:center; margin:10px 0 20px 0;">' +
-      '<button id="yaktube-voice-mic-pulse-btn" class="yaktube-voice-mic-pulse-btn" style="background:#cc0000; color:#fff; border:none; border-radius:50%; width:76px; height:76px; font-size:34px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(204,0,0,0.5); z-index:2;" aria-label="Mikrofonu durdur veya başlat">' +
-      '🎙️' +
-      '</button>' +
-      '<div id="yaktube-voice-ripple" class="yaktube-voice-ripple" style="position:absolute; width:76px; height:76px; border-radius:50%; background:rgba(204,0,0,0.4); animation:yaktube-ripple-wave 1.6s infinite ease-out; z-index:1;"></div>' +
+      '<button id="yaktube-modal-submit-btn" class="yaktube-modal-search-action-btn" aria-label="Ara">🔍 Ara</button>' +
+      '<button id="yaktube-modal-voice-btn" class="yaktube-modal-voice-btn" aria-label="Sesle Ara (Shift+V)" title="Sesle Ara">🎙️</button>' +
       '</div>' +
-      '<div class="yaktube-voice-hint-text" style="font-size:13px; color:#888; margin-top:10px;">Aramak istediğiniz sanatçıyı, şarkıyı veya konuyu söyleyin.</div>' +
+      '<div class="yaktube-modal-body">' +
+      '<div id="yaktube-modal-voice-section" class="yaktube-modal-voice-section">' +
+      '<div id="yaktube-modal-voice-status" class="yaktube-modal-voice-status">🎙️ Dinleniyor...</div>' +
+      '<div id="yaktube-modal-voice-transcript" class="yaktube-modal-voice-transcript">Lütfen aramak istediğiniz videoyu söyleyin...</div>' +
+      '<button id="yaktube-modal-mic-pulse" class="yaktube-modal-mic-pulse-btn" aria-label="Mikrofonu durdur">🎙️</button>' +
+      '</div>' +
+      '<div class="yaktube-modal-section-title">🔥 Hızlı ve Popüler Aramalar</div>' +
+      '<div class="yaktube-modal-chips-grid">' +
+      '<button class="yaktube-modal-chip" data-query="Tarkan">🎵 Tarkan</button>' +
+      '<button class="yaktube-modal-chip" data-query="Barış Manço">🎸 Barış Manço</button>' +
+      '<button class="yaktube-modal-chip" data-query="Python Dersleri">💻 Python Dersleri</button>' +
+      '<button class="yaktube-modal-chip" data-query="Yapay Zeka">🤖 Yapay Zeka</button>' +
+      '<button class="yaktube-modal-chip" data-query="Sesli Kitap">🎧 Sesli Kitap</button>' +
+      '<button class="yaktube-modal-chip" data-query="Canlı Haber">📺 Canlı Haber</button>' +
+      '<button class="yaktube-modal-chip" data-query="Gitar Dersi">🎼 Gitar Dersi</button>' +
+      '<button class="yaktube-modal-chip" data-query="Bilim Belgeseli">🌍 Bilim Belgeseli</button>' +
+      '</div>' +
+      '<div class="yaktube-modal-hint-footer">' +
+      '<span>💡 <b>Enter</b> ile ara, <b>Shift+V</b> ile sesli ara</span>' +
+      '<span><b>Escape</b> ile kapat</span>' +
+      '</div>' +
       '</div>' +
       '</div>';
 
     document.body.appendChild(modal);
 
-    var closeBtn = modal.querySelector('#yaktube-voice-modal-close');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeYouTubeVoiceModal();
-      });
-    }
+    var inp = modal.querySelector('#yaktube-modal-input');
+    var clearBtn = modal.querySelector('#yaktube-modal-clear-btn');
+    var backBtn = modal.querySelector('#yaktube-modal-back-btn');
+    var submitBtn = modal.querySelector('#yaktube-modal-submit-btn');
+    var voiceBtn = modal.querySelector('#yaktube-modal-voice-btn');
+    var micPulseBtn = modal.querySelector('#yaktube-modal-mic-pulse');
 
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) {
-        closeYouTubeVoiceModal();
+    // Input typing & clear
+    inp.addEventListener('input', function () {
+      if (inp.value && inp.value.trim().length > 0) {
+        clearBtn.style.display = 'inline-flex';
+      } else {
+        clearBtn.style.display = 'none';
       }
     });
 
-    var pulseBtn = modal.querySelector('#yaktube-voice-mic-pulse-btn');
-    if (pulseBtn) {
-      pulseBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (isVoiceListeningActive) {
-          stopVoiceRecognition();
-        } else {
-          startVoiceRecognition();
-        }
-      });
+    clearBtn.addEventListener('click', function () {
+      inp.value = '';
+      clearBtn.style.display = 'none';
+      inp.focus();
+      announce('Arama metni temizlendi.');
+    });
+
+    // Close on Back button or Escape
+    backBtn.addEventListener('click', function () {
+      closeFullSearchModal();
+    });
+
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) {
+        closeFullSearchModal();
+      }
+    });
+
+    // Search execute
+    function executeSearch(query) {
+      var q = (query || inp.value || '').trim();
+      if (q) {
+        announce('"' + q + '" için arama yapılıyor...', true);
+        closeFullSearchModal();
+        window.location.href = '/search/videos?search=' + encodeURIComponent(q);
+      }
     }
+
+    submitBtn.addEventListener('click', function () {
+      executeSearch();
+    });
+
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        executeSearch();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFullSearchModal();
+      }
+    });
+
+    // Chips click
+    modal.querySelectorAll('.yaktube-modal-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var query = chip.getAttribute('data-query');
+        executeSearch(query);
+      });
+    });
+
+    // Voice button click
+    voiceBtn.addEventListener('click', function () {
+      toggleVoiceInsideModal();
+    });
+
+    micPulseBtn.addEventListener('click', function () {
+      toggleVoiceInsideModal();
+    });
 
     return modal;
   }
 
-  function openYouTubeVoiceModal(targetInput) {
-    modalTargetInput =
-      targetInput ||
-      document.querySelector('my-search-typeahead input, my-header input[type="search"], input[type="search"]');
-
-    var modal = createYouTubeVoiceModal();
+  function openFullSearchModal(initialQuery, autoStartVoice) {
+    var modal = createFullSearchModal();
     modal.style.display = 'flex';
 
-    var statusText = modal.querySelector('#yaktube-voice-status-text');
-    var transcriptPreview = modal.querySelector('#yaktube-voice-transcript-preview');
-    if (statusText) statusText.textContent = 'Dinleniyor...';
-    if (transcriptPreview) transcriptPreview.textContent = '';
+    var inp = modal.querySelector('#yaktube-modal-input');
+    var clearBtn = modal.querySelector('#yaktube-modal-clear-btn');
+    if (inp) {
+      inp.value = initialQuery || '';
+      if (inp.value) clearBtn.style.display = 'inline-flex';
+      inp.focus();
+      inp.select();
+    }
 
-    announce('Sesli arama penceresi açıldı. Dinleniyor, lütfen aramak istediğiniz videoyu söyleyin.', true);
+    announce('Arama penceresi açıldı. Arayacağınız konuyu yazın veya sesle arayın.', true);
 
+    if (autoStartVoice) {
+      startVoiceInsideModal();
+    }
+  }
+
+  function closeFullSearchModal() {
+    var modal = document.getElementById('yaktube-full-search-modal');
+    if (modal) modal.style.display = 'none';
+    stopVoiceInsideModal();
+    announce('Arama penceresi kapatıldı.');
+  }
+
+  function toggleVoiceInsideModal() {
+    if (isVoiceListening) {
+      stopVoiceInsideModal();
+    } else {
+      startVoiceInsideModal();
+    }
+  }
+
+  function startVoiceInsideModal() {
     var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var modal = document.getElementById('yaktube-full-search-modal');
+    if (!modal) return;
+
+    var voiceSec = modal.querySelector('#yaktube-modal-voice-section');
+    var statusText = modal.querySelector('#yaktube-modal-voice-status');
+    var transcriptEl = modal.querySelector('#yaktube-modal-voice-transcript');
+    var inp = modal.querySelector('#yaktube-modal-input');
+
+    if (voiceSec) voiceSec.style.display = 'block';
+    if (statusText) statusText.textContent = '🎙️ Dinleniyor...';
+    if (transcriptEl) transcriptEl.textContent = 'Lütfen aramak istediğiniz videoyu söyleyin...';
+
     if (!SpeechRec) {
       if (statusText) statusText.textContent = 'Tarayıcıda Ses Tanıma Desteklenmiyor';
-      var hint = modal.querySelector('.yaktube-voice-hint-text');
-      if (hint) hint.textContent = 'Lütfen sesli arama için Google Chrome veya Microsoft Edge kullanın.';
-      stopVoiceRecognition();
-      announce('Tarayıcınız sesli arama özelliğini desteklemiyor. Lütfen Chrome veya Edge kullanın.');
+      if (transcriptEl) transcriptEl.textContent = 'Lütfen Google Chrome veya Microsoft Edge kullanın.';
+      announce('Tarayıcınız ses tanımayı desteklemiyor. Lütfen Chrome veya Edge kullanın.');
       return;
     }
 
-    startVoiceRecognition();
-
-    var closeBtn = modal.querySelector('#yaktube-voice-modal-close');
-    if (closeBtn) closeBtn.focus();
-  }
-
-  function closeYouTubeVoiceModal() {
-    var modal = document.getElementById('yaktube-voice-modal');
-    if (modal) modal.style.display = 'none';
-    stopVoiceRecognition();
-    announce('Sesli arama penceresi kapatıldı.');
-  }
-
-  function startVoiceRecognition() {
-    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRec) return;
-
-    if (activeVoiceRecognition) {
-      try {
-        activeVoiceRecognition.stop();
-      } catch (e) {}
-    }
-
-    var modal = document.getElementById('yaktube-voice-modal');
-    var statusText = modal ? modal.querySelector('#yaktube-voice-status-text') : null;
-    var transcriptPreview = modal ? modal.querySelector('#yaktube-voice-transcript-preview') : null;
-    var micBtn = modal ? modal.querySelector('#yaktube-voice-mic-pulse-btn') : null;
-    var ripple = modal ? modal.querySelector('#yaktube-voice-ripple') : null;
-
-    if (statusText) statusText.textContent = 'Dinleniyor...';
-    if (transcriptPreview) transcriptPreview.textContent = '';
-    if (micBtn) {
-      micBtn.style.background = '#cc0000';
-      micBtn.style.boxShadow = '0 4px 20px rgba(204,0,0,0.5)';
-    }
-    if (ripple) ripple.style.display = 'block';
+    announce('Sesli arama dinleniyor, lütfen aramak istediğiniz videoyu söyleyin.', true);
 
     try {
-      activeVoiceRecognition = new SpeechRec();
-      activeVoiceRecognition.lang = navigator.language || 'tr-TR';
-      activeVoiceRecognition.continuous = false;
-      activeVoiceRecognition.interimResults = true;
-      activeVoiceRecognition.maxAlternatives = 1;
+      activeVoiceRec = new SpeechRec();
+      activeVoiceRec.lang = navigator.language || 'tr-TR';
+      activeVoiceRec.continuous = false;
+      activeVoiceRec.interimResults = true;
+      activeVoiceRec.maxAlternatives = 1;
 
-      isVoiceListeningActive = true;
+      isVoiceListening = true;
 
-      activeVoiceRecognition.onresult = function (ev) {
+      activeVoiceRec.onresult = function (ev) {
         if (ev.results && ev.results[0]) {
           var transcript = ev.results[0][0].transcript.trim();
-          if (transcriptPreview) transcriptPreview.textContent = '"' + transcript + '"';
+          if (transcriptEl) transcriptEl.textContent = '"' + transcript + '"';
+          if (inp) inp.value = transcript;
 
           if (ev.results[0].isFinal) {
             announce('"' + transcript + '" için arama başlatılıyor...', true);
-            if (modalTargetInput) {
-              modalTargetInput.value = transcript;
-              modalTargetInput.dispatchEvent(new Event('input', { bubbles: true }));
-              modalTargetInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-              setTimeout(function () {
-                closeYouTubeVoiceModal();
-                var form = modalTargetInput.closest('form');
-                if (form) {
-                  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-                } else {
-                  window.location.href = '/search/videos?search=' + encodeURIComponent(transcript);
-                }
-              }, 400);
-            }
+            setTimeout(function () {
+              closeFullSearchModal();
+              window.location.href = '/search/videos?search=' + encodeURIComponent(transcript);
+            }, 500);
           }
         }
       };
 
-      activeVoiceRecognition.onerror = function (ev) {
-        console.warn('[YakTube] Voice modal error:', ev.error);
-        if (statusText) {
-          if (ev.error === 'not-allowed') {
-            statusText.textContent = 'Mikrofon İzni Gerekli';
-            announce('Mikrofon izni verilmedi.');
-          } else if (ev.error === 'no-speech') {
-            statusText.textContent = 'Ses Algılanamadı';
-            announce('Ses algılanamadı, tekrar denemek için mikrofona dokunun.');
-          } else {
-            statusText.textContent = 'Tekrar Deneyin';
-          }
-        }
-        stopVoiceRecognition();
+      activeVoiceRec.onerror = function (ev) {
+        if (statusText) statusText.textContent = 'Ses Algılanamadı';
+        if (transcriptEl) transcriptEl.textContent = 'Tekrar denemek için mikrofona dokunun.';
+        stopVoiceInsideModal();
       };
 
-      activeVoiceRecognition.onend = function () {
-        if (isVoiceListeningActive) {
-          stopVoiceRecognition();
-        }
+      activeVoiceRec.onend = function () {
+        stopVoiceInsideModal();
       };
 
-      activeVoiceRecognition.start();
+      activeVoiceRec.start();
     } catch (err) {
-      console.error('[YakTube] SpeechRec start failed:', err);
-      stopVoiceRecognition();
+      stopVoiceInsideModal();
     }
   }
 
-  function stopVoiceRecognition() {
-    isVoiceListeningActive = false;
-    if (activeVoiceRecognition) {
+  function stopVoiceInsideModal() {
+    isVoiceListening = false;
+    if (activeVoiceRec) {
       try {
-        activeVoiceRecognition.stop();
+        activeVoiceRec.stop();
       } catch (e) {}
-      activeVoiceRecognition = null;
+      activeVoiceRec = null;
     }
-
-    var modal = document.getElementById('yaktube-voice-modal');
+    var modal = document.getElementById('yaktube-full-search-modal');
     if (modal) {
-      var micBtn = modal.querySelector('#yaktube-voice-mic-pulse-btn');
-      var ripple = modal.querySelector('#yaktube-voice-ripple');
-      var statusText = modal.querySelector('#yaktube-voice-status-text');
-
-      if (micBtn) {
-        micBtn.style.background = '#333';
-        micBtn.style.boxShadow = 'none';
-      }
-      if (ripple) ripple.style.display = 'none';
-      if (statusText && statusText.textContent === 'Dinleniyor...') {
-        statusText.textContent = 'Mikrofona dokunup konuşun';
-      }
+      var voiceSec = modal.querySelector('#yaktube-modal-voice-section');
+      if (voiceSec) voiceSec.style.display = 'none';
     }
   }
 
   function transformToYouTubeSearchBar(searchInp, searchContainer) {
     if (searchInp.hasAttribute('data-yaktube-yt-styled')) return;
     searchInp.setAttribute('data-yaktube-yt-styled', 'true');
-    searchInp.setAttribute('aria-label', getInstanceName() + ' Video Arama');
+    searchInp.setAttribute('aria-label', getInstanceName() + ' Video Arama (Açmak için tıklayın)');
+    searchInp.setAttribute('title', 'Arama Penceresini Aç');
 
     // 1. Create Outer Wrapper
     var outerWrap = searchContainer.querySelector('.yaktube-search-outer-wrap');
@@ -1648,55 +1676,29 @@
       // Move Input Inside Pill
       pillWrapper.appendChild(searchInp);
 
-      // Add Clear Button (✕)
-      var clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
-      clearBtn.className = 'yaktube-clear-search-btn';
-      clearBtn.setAttribute('aria-label', 'Arama Metnini Temizle');
-      clearBtn.innerHTML = '✕';
-      pillWrapper.appendChild(clearBtn);
-
       // Add Search Submit Button (🔍)
       var submitBtn = document.createElement('button');
-      submitBtn.type = 'submit';
+      submitBtn.type = 'button';
       submitBtn.className = 'yaktube-search-submit-btn';
-      submitBtn.setAttribute('aria-label', 'Ara');
+      submitBtn.setAttribute('aria-label', 'Arama Penceresini Aç');
       submitBtn.setAttribute('title', 'Ara');
       submitBtn.innerHTML = '🔍';
       pillWrapper.appendChild(submitBtn);
 
-      function updateClearState() {
-        if (searchInp.value && searchInp.value.trim().length > 0) {
-          clearBtn.style.display = 'inline-flex';
-        } else {
-          clearBtn.style.display = 'none';
-        }
-      }
-
-      searchInp.addEventListener('input', updateClearState);
-      searchInp.addEventListener('focus', updateClearState);
-
-      clearBtn.addEventListener('click', function (e) {
+      // Click on search pill opens full YouTube search modal!
+      searchInp.addEventListener('click', function (e) {
         e.preventDefault();
-        e.stopPropagation();
-        searchInp.value = '';
-        searchInp.dispatchEvent(new Event('input', { bubbles: true }));
-        searchInp.dispatchEvent(new Event('change', { bubbles: true }));
-        clearBtn.style.display = 'none';
-        searchInp.focus();
-        announce('Arama kutusu temizlendi.');
+        openFullSearchModal(searchInp.value, false);
+      });
+
+      searchInp.addEventListener('focus', function (e) {
+        e.preventDefault();
+        openFullSearchModal(searchInp.value, false);
       });
 
       submitBtn.addEventListener('click', function (e) {
-        var query = (searchInp.value || '').trim();
-        if (query) {
-          var form = searchInp.closest('form');
-          if (form) {
-            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-          } else {
-            window.location.href = '/search/videos?search=' + encodeURIComponent(query);
-          }
-        }
+        e.preventDefault();
+        openFullSearchModal(searchInp.value, false);
       });
     }
 
@@ -1715,23 +1717,9 @@
       voiceBtn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        openYouTubeVoiceModal(searchInp);
+        openFullSearchModal('', true);
       });
     }
-
-    // 4. Escape key handling
-    searchInp.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' || e.keyCode === 27) {
-        if (searchInp.value && searchInp.value.trim().length > 0) {
-          searchInp.value = '';
-          searchInp.dispatchEvent(new Event('input', { bubbles: true }));
-          announce('Arama metni temizlendi.');
-        } else {
-          searchInp.blur();
-          announce('Arama kutusundan çıkıldı.');
-        }
-      }
-    });
   }
 
   function injectSearchEnhancements() {
@@ -1780,33 +1768,23 @@
     var activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
     var isInputActive = activeTag === 'input' || activeTag === 'textarea';
 
-    // Shift + V: Open YouTube Voice Modal
+    // Shift + V: Open YouTube Voice Search Modal
     if (e.shiftKey && (e.key === 'V' || e.key === 'v') && !isInputActive) {
       e.preventDefault();
-      var searchInp = document.querySelector(
-        'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
-      );
-      openYouTubeVoiceModal(searchInp);
+      openFullSearchModal('', true);
     }
-    // Escape: Close Voice Modal
+    // Escape: Close Full Search Modal
     else if (e.key === 'Escape' || e.keyCode === 27) {
-      var modal = document.getElementById('yaktube-voice-modal');
+      var modal = document.getElementById('yaktube-full-search-modal');
       if (modal && modal.style.display === 'flex') {
         e.preventDefault();
-        closeYouTubeVoiceModal();
+        closeFullSearchModal();
       }
     }
-    // / : Focus Search Input
-    else if (e.key === '/' && !isInputActive && !e.ctrlKey && !e.metaKey) {
+    // / or S: Open Search Modal
+    else if ((e.key === '/' || e.key === 's' || e.key === 'S') && !isInputActive && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      var searchInp = document.querySelector(
-        'my-search-typeahead input, my-header input[type="search"], input[type="search"]'
-      );
-      if (searchInp) {
-        searchInp.focus();
-        searchInp.select();
-        announce('Arama kutusuna odaklanıldı.');
-      }
+      openFullSearchModal('', false);
     }
   });
 
