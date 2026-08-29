@@ -411,10 +411,11 @@ my-header .action-buttons {
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------- */
-/* YOUTUBE FULL SEARCH & VOICE MODAL (v1.3.0)                                 */
+/* -------------------------------------------------------------------------- */
+/* YOUTUBE FULL SEARCH & VOICE MODAL (v1.3.1 - Sleek Trigger Pill)            */
 /* -------------------------------------------------------------------------- */
 
-/* Header Search Bar Trigger (Pill Shape) */
+/* Header Search Trigger Container */
 my-search-typeahead,
 .search-container,
 .header-search {
@@ -422,7 +423,7 @@ my-search-typeahead,
   align-items: center !important;
   position: relative !important;
   width: 100% !important;
-  max-width: 580px !important;
+  max-width: 540px !important;
   margin: 0 auto !important;
 }
 
@@ -432,50 +433,56 @@ my-search-typeahead,
   width: 100% !important;
 }
 
-.yaktube-search-pill-wrapper {
+/* Clickable Pill Button in Header */
+.yaktube-search-trigger-pill {
   display: flex !important;
   align-items: center !important;
   background: #121212 !important;
   border: 1px solid #303030 !important;
   border-radius: 40px !important;
-  padding: 0 0 0 14px !important;
+  padding: 8px 18px !important;
   transition: all 0.2s ease !important;
   width: 100% !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4) !important;
-  overflow: hidden !important;
-  cursor: text !important;
-}
-
-.yaktube-search-pill-wrapper:hover {
-  border-color: #555 !important;
-}
-
-.yaktube-search-pill-wrapper input {
-  background: transparent !important;
-  border: none !important;
-  color: #f1f1f1 !important;
-  font-size: 15px !important;
-  padding: 8px 6px !important;
-  width: 100% !important;
-  outline: none !important;
-  box-shadow: none !important;
-}
-
-.yaktube-search-submit-btn {
-  background: #222222 !important;
-  color: #f1f1f1 !important;
-  border: none !important;
-  border-left: 1px solid #303030 !important;
-  padding: 8px 18px !important;
   cursor: pointer !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  font-size: 14px !important;
-  transition: all 0.2s ease !important;
-  flex-shrink: 0 !important;
+  color: #888 !important;
+  font-size: 15px !important;
+  user-select: none !important;
+  gap: 10px !important;
 }
 
+.yaktube-search-trigger-pill:hover,
+.yaktube-search-trigger-pill:focus {
+  border-color: #ff8f37 !important;
+  background: #18181c !important;
+  color: #f1f1f1 !important;
+  box-shadow: 0 0 12px rgba(255, 143, 55, 0.25) !important;
+  outline: none !important;
+}
+
+.yaktube-search-trigger-icon {
+  font-size: 15px !important;
+  color: #ff8f37 !important;
+}
+
+.yaktube-search-trigger-text {
+  flex: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: left !important;
+}
+
+.yaktube-search-trigger-shortcut {
+  font-size: 11px !important;
+  background: #252530 !important;
+  color: #aaa !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Circular Voice Button in Header */
 .yaktube-voice-search-btn {
   background: #1f1f1f !important;
   color: #f1f1f1 !important;
@@ -494,11 +501,13 @@ my-search-typeahead,
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
-.yaktube-voice-search-btn:hover {
+.yaktube-voice-search-btn:hover,
+.yaktube-voice-search-btn:focus {
   background: #2a2a2a !important;
   border-color: #ff8f37 !important;
   color: #ff8f37 !important;
   transform: scale(1.06) !important;
+  outline: none !important;
 }
 
 /* -------------------------------------------------------------------------- */

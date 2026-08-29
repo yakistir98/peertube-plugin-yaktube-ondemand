@@ -1404,7 +1404,8 @@
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.0)
+  // --------------------------------------------------------------------------
+  // 8. FULL YOUTUBE SEARCH & VOICE MODAL ENGINE (v1.3.1)
   // --------------------------------------------------------------------------
   var activeVoiceRec = null;
   var isVoiceListening = false;
@@ -1547,8 +1548,10 @@
     if (inp) {
       inp.value = initialQuery || '';
       if (inp.value) clearBtn.style.display = 'inline-flex';
-      inp.focus();
-      inp.select();
+      setTimeout(function () {
+        inp.focus();
+        inp.select();
+      }, 50);
     }
 
     announce('Arama penceresi açıldı. Arayacağınız konuyu yazın veya sesle arayın.', true);
@@ -1653,52 +1656,52 @@
   }
 
   function transformToYouTubeSearchBar(searchInp, searchContainer) {
-    if (searchInp.hasAttribute('data-yaktube-yt-styled')) return;
-    searchInp.setAttribute('data-yaktube-yt-styled', 'true');
-    searchInp.setAttribute('aria-label', getInstanceName() + ' Video Arama (Açmak için tıklayın)');
-    searchInp.setAttribute('title', 'Arama Penceresini Aç');
+    if (searchContainer.hasAttribute('data-yaktube-trigger-styled')) return;
+    searchContainer.setAttribute('data-yaktube-trigger-styled', 'true');
+
+    // Hide original native inputs to prevent typing outside modal and avoid clutter
+    searchInp.style.display = 'none';
+    searchInp.setAttribute('tabindex', '-1');
+    searchInp.setAttribute('aria-hidden', 'true');
+
+    var nativeInputs = searchContainer.querySelectorAll('input, button');
+    nativeInputs.forEach(function (el) {
+      if (!el.classList.contains('yaktube-search-trigger-pill') && !el.classList.contains('yaktube-voice-search-btn')) {
+        el.style.display = 'none';
+        el.setAttribute('tabindex', '-1');
+        el.setAttribute('aria-hidden', 'true');
+      }
+    });
 
     // 1. Create Outer Wrapper
     var outerWrap = searchContainer.querySelector('.yaktube-search-outer-wrap');
     if (!outerWrap) {
       outerWrap = document.createElement('div');
       outerWrap.className = 'yaktube-search-outer-wrap';
-      searchInp.parentNode.insertBefore(outerWrap, searchInp);
+      searchContainer.appendChild(outerWrap);
     }
 
-    // 2. Create Pill Box
-    var pillWrapper = outerWrap.querySelector('.yaktube-search-pill-wrapper');
-    if (!pillWrapper) {
-      pillWrapper = document.createElement('div');
-      pillWrapper.className = 'yaktube-search-pill-wrapper';
-      outerWrap.appendChild(pillWrapper);
+    // 2. Create Single Sleek Pill Trigger
+    var triggerPill = outerWrap.querySelector('.yaktube-search-trigger-pill');
+    if (!triggerPill) {
+      triggerPill = document.createElement('button');
+      triggerPill.type = 'button';
+      triggerPill.className = 'yaktube-search-trigger-pill';
+      triggerPill.setAttribute('aria-label', getInstanceName() + " ve YouTube'da Arama Yap (Açmak için tıklayın)");
+      triggerPill.setAttribute('title', 'Arama Penceresini Aç (/)');
 
-      // Move Input Inside Pill
-      pillWrapper.appendChild(searchInp);
+      triggerPill.innerHTML =
+        '<span class="yaktube-search-trigger-icon">🔍</span>' +
+        '<span class="yaktube-search-trigger-text">' +
+        getInstanceName() +
+        " ve YouTube'da arayın...</span>" +
+        '<span class="yaktube-search-trigger-shortcut">/</span>';
 
-      // Add Search Submit Button (🔍)
-      var submitBtn = document.createElement('button');
-      submitBtn.type = 'button';
-      submitBtn.className = 'yaktube-search-submit-btn';
-      submitBtn.setAttribute('aria-label', 'Arama Penceresini Aç');
-      submitBtn.setAttribute('title', 'Ara');
-      submitBtn.innerHTML = '🔍';
-      pillWrapper.appendChild(submitBtn);
+      outerWrap.appendChild(triggerPill);
 
-      // Click on search pill opens full YouTube search modal!
-      searchInp.addEventListener('click', function (e) {
+      triggerPill.addEventListener('click', function (e) {
         e.preventDefault();
-        openFullSearchModal(searchInp.value, false);
-      });
-
-      searchInp.addEventListener('focus', function (e) {
-        e.preventDefault();
-        openFullSearchModal(searchInp.value, false);
-      });
-
-      submitBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        openFullSearchModal(searchInp.value, false);
+        openFullSearchModal('', false);
       });
     }
 
@@ -1730,19 +1733,6 @@
       var searchInp = container.querySelector('input[type="search"], input[type="text"], input');
       if (searchInp) {
         transformToYouTubeSearchBar(searchInp, container);
-      }
-    });
-
-    var headerInputs = document.querySelectorAll('my-header input');
-    headerInputs.forEach(function (inp) {
-      var parent = inp.closest('my-search-typeahead') || inp.parentElement;
-      if (
-        parent &&
-        (inp.type === 'search' ||
-          inp.type === 'text' ||
-          (inp.placeholder && inp.placeholder.toLowerCase().includes('ara')))
-      ) {
-        transformToYouTubeSearchBar(inp, parent);
       }
     });
 
