@@ -339,6 +339,7 @@
 
   // 3. Intelligent Branding & A11y DOM Auto-Fixer
   function autoFixDOM() {
+    injectAccessiblePlayerBar();
     injectYakNetSSO();
 
     // Aggressively remove generic Framasoft Open-in-App / Play Store banners
@@ -576,7 +577,7 @@
 
   setInterval(autoFixDOM, 1000);
 
-  // 3. Keyboard Shortcuts Modal & Quick Info Engine (v1.4.0)
+  // 3. Screen-Reader & Turkish Q Optimized Shortcuts & Player Bar (v1.4.1)
   function toggleShortcutsModal() {
     var modal = document.getElementById('yaktube-shortcuts-dialog');
     if (modal) {
@@ -597,27 +598,27 @@
       modal.setAttribute('aria-modal', 'true');
       modal.setAttribute('aria-labelledby', 'yaktube-shortcuts-title');
       modal.innerHTML =
-        '<div class="yaktube-modal-card" style="max-width: 560px; background:#1e1e24; border-radius:18px; padding:24px; color:#fff; box-shadow:0 16px 40px rgba(0,0,0,0.8);">' +
+        '<div class="yaktube-modal-card" style="max-width: 600px; background:#1e1e24; border-radius:18px; padding:24px; color:#fff; box-shadow:0 16px 40px rgba(0,0,0,0.8);">' +
         '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">' +
-        '<h3 id="yaktube-shortcuts-title" style="margin:0; font-size:18px; color:#ff8f37;">⌨️ Video Oynatıcı & Gezinme Kısayolları</h3>' +
+        '<h3 id="yaktube-shortcuts-title" style="margin:0; font-size:18px; color:#ff8f37;">⌨️ Klavye Kısayolları (Ekran Okuyucu Uyumlu)</h3>' +
         '<button id="yaktube-shortcuts-close" class="yaktube-voice-modal-close-btn" aria-label="Kapat">✕</button>' +
         '</div>' +
+        '<div style="font-size:12px; color:#aaa; margin-bottom:14px;">💡 <b>Ekran Okuyucu Notu:</b> Sanal imleç (Browse mode) açıkken kısayolları <b>Alt</b> tuşuyla birlikte kullanabilir veya video oynatıcı butonlarından faydalanabilirsiniz.</div>' +
         '<table class="yaktube-shortcuts-table" style="width:100%; border-collapse:collapse; font-size:13px;">' +
-        '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; color:#aaa;"><th style="padding:6px 0;">Kısayol</th><th style="padding:6px 0;">İşlev</th></tr></thead>' +
+        '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; color:#aaa;"><th style="padding:6px 0;">Kısayol (Evrensel / Tek Tuş)</th><th style="padding:6px 0;">İşlev</th></tr></thead>' +
         '<tbody>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Space</span> veya <span class="yaktube-kbd">K</span></td><td>Oynat / Duraklat</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">J</span> / <span class="yaktube-kbd">L</span></td><td>10 saniye geri / ileri sar</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Sol</span> / <span class="yaktube-kbd">Sağ Ok</span></td><td>5 saniye geri / ileri sar</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Yukarı</span> / <span class="yaktube-kbd">Aşağı Ok</span></td><td>Sesi %5 artır / azalt</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">M</span></td><td>Sesi Kapat / Aç (Mute)</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">F</span></td><td>Tam Ekran</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">T</span></td><td>Sinema / Tiyatro Modu</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">C</span></td><td>Altyazıları Aç / Kapat</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">I</span></td><td>Hızlı Video Bilgisi & İstatistikler</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">&gt;</span> / <span class="yaktube-kbd">&lt;</span> (Shift+.)</td><td>Oynatma hızını artır / azalt</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">0 - 9</span></td><td>Videonun %0 - %90 noktasına atla</td></tr>' +
-        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">/</span></td><td>Arama penceresini aç</td></tr>' +
-        '<tr><td style="padding:8px 0;"><span class="yaktube-kbd">Shift + V</span></td><td>Sesli aramayı başlat</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + K</span> veya <span class="yaktube-kbd">Space</span></td><td>Oynat / Duraklat</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + J</span> veya <span class="yaktube-kbd">J</span></td><td>10 saniye geri sar</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + L</span> veya <span class="yaktube-kbd">L</span></td><td>10 saniye ileri sar</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + Yukarı / Aşağı</span></td><td>Sesi %5 artır / azalt</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + M</span> veya <span class="yaktube-kbd">M</span></td><td>Sesi Kapat / Aç (Mute)</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + T</span> veya <span class="yaktube-kbd">T</span></td><td>Sinema / Tiyatro Modu</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + I</span> veya <span class="yaktube-kbd">I</span></td><td>Hızlı Video Bilgisi & İstatistikler</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + C</span> veya <span class="yaktube-kbd">C</span></td><td>Altyazıları Aç / Kapat</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + .</span> / <span class="yaktube-kbd">Alt + ,</span></td><td>Oynatma hızını artır / azalt</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + S</span> veya <span class="yaktube-kbd">/</span> (Shift+7)</td><td>Arama penceresini aç</td></tr>' +
+        '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + V</span> veya <span class="yaktube-kbd">Shift + V</span></td><td>Sesli aramayı başlat</td></tr>' +
+        '<tr><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + H</span> veya <span class="yaktube-kbd">F1</span> veya <span class="yaktube-kbd">?</span></td><td>Bu kılavuzu aç / kapat</td></tr>' +
         '</tbody>' +
         '</table>' +
         '</div>';
@@ -668,8 +669,8 @@
     var curTime = formatTime(video.currentTime);
     var totalTime = formatTime(video.duration || 0);
     var remaining = formatTime((video.duration || 0) - video.currentTime);
-    var speed = video.playbackRate + 'x';
-    var volume = Math.round(video.volume * 100) + '%';
+    var speed = (video.playbackRate || 1) + 'x';
+    var volume = Math.round((video.volume || 1) * 100) + '%';
     var quality = video.videoHeight ? video.videoHeight + 'p' : 'Otomatik';
 
     // Visual Toast
@@ -726,7 +727,111 @@
 
   var speedSteps = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
-  // 4. Global Keydown Listener (Pro Video Player Engine)
+  function adjustPlaybackSpeed(increase) {
+    var video = getVideoElement();
+    if (!video) return;
+    var curSpeed = video.playbackRate || 1;
+    if (increase) {
+      var nextIdx = speedSteps.findIndex(function (s) {
+        return s > curSpeed;
+      });
+      video.playbackRate = nextIdx !== -1 ? speedSteps[nextIdx] : 2;
+      announce('Oynatma hızı ' + video.playbackRate + ' katına çıkarıldı.');
+    } else {
+      var prevSteps = speedSteps.filter(function (s) {
+        return s < curSpeed;
+      });
+      video.playbackRate = prevSteps.length > 0 ? prevSteps[prevSteps.length - 1] : 0.25;
+      announce('Oynatma hızı ' + video.playbackRate + ' katına düşürüldü.');
+    }
+  }
+
+  // 3.1. Injects Accessible Player Action Bar under the Watch Video
+  function injectAccessiblePlayerBar() {
+    if (!window.location.pathname.includes('/videos/watch/')) return;
+    var video = getVideoElement();
+    if (!video) return;
+
+    var targetContainer = document.querySelector(
+      'my-video-watch, .video-watch, .watch-container, #yaktube-ondemand-container'
+    );
+    if (!targetContainer) return;
+
+    var existingBar = document.getElementById('yaktube-player-action-bar');
+    if (existingBar) return;
+
+    var bar = document.createElement('div');
+    bar.id = 'yaktube-player-action-bar';
+    bar.className = 'yaktube-player-action-bar';
+    bar.setAttribute('role', 'toolbar');
+    bar.setAttribute('aria-label', 'Erişilebilir Video Kontrolleri');
+
+    bar.innerHTML =
+      '<span class="yaktube-player-bar-label">⚡ Oynatıcı Kontrolleri:</span>' +
+      '<button id="yaktube-bar-rewind-btn" class="yaktube-player-action-btn" aria-label="10 Saniye Geri Sar (Alt+J)">⏪ 10sn Geri</button>' +
+      '<button id="yaktube-bar-play-btn" class="yaktube-player-action-btn" aria-label="Oynat veya Duraklat (Alt+K)">⏯️ Oynat/Duraklat</button>' +
+      '<button id="yaktube-bar-forward-btn" class="yaktube-player-action-btn" aria-label="10 Saniye İleri Sar (Alt+L)">⏩ 10sn İleri</button>' +
+      '<button id="yaktube-bar-speed-btn" class="yaktube-player-action-btn" aria-label="Oynatma Hızını Değiştir (Alt+.)">⚡ Hız</button>' +
+      '<button id="yaktube-bar-theater-btn" class="yaktube-player-action-btn" aria-label="Sinema Modunu Aç/Kapat (Alt+T)">🎭 Sinema</button>' +
+      '<button id="yaktube-bar-info-btn" class="yaktube-player-action-btn" aria-label="Video Bilgisi ve İstatistikleri (Alt+I)">📊 Bilgi</button>' +
+      '<button id="yaktube-bar-help-btn" class="yaktube-player-action-btn" aria-label="Kısayol Kılavuzu (Alt+H veya F1)">⌨️ Kısayollar</button>';
+
+    var playerWrap =
+      document.querySelector('.player-container, .video-player-container, .player-wrapper, my-video-watch .player') ||
+      targetContainer;
+    if (playerWrap && playerWrap.nextSibling) {
+      playerWrap.parentNode.insertBefore(bar, playerWrap.nextSibling);
+    } else {
+      targetContainer.prepend(bar);
+    }
+
+    // Attach button actions
+    bar.querySelector('#yaktube-bar-rewind-btn').addEventListener('click', function () {
+      if (video) {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+        announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+      }
+    });
+
+    bar.querySelector('#yaktube-bar-play-btn').addEventListener('click', function () {
+      if (video) {
+        if (video.paused) {
+          video.play();
+          announce('Video oynatılıyor.');
+        } else {
+          video.pause();
+          announce('Video duraklatıldı.');
+        }
+      }
+    });
+
+    bar.querySelector('#yaktube-bar-forward-btn').addEventListener('click', function () {
+      if (video) {
+        video.currentTime = Math.min(video.duration || 99999, video.currentTime + 10);
+        announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+      }
+    });
+
+    bar.querySelector('#yaktube-bar-speed-btn').addEventListener('click', function () {
+      adjustPlaybackSpeed(true);
+    });
+
+    bar.querySelector('#yaktube-bar-theater-btn').addEventListener('click', function () {
+      document.body.classList.toggle('yaktube-theater-mode');
+      var isT = document.body.classList.contains('yaktube-theater-mode');
+      announce(isT ? 'Sinema modu açıldı.' : 'Sinema modundan çıkıldı.');
+    });
+
+    bar.querySelector('#yaktube-bar-info-btn').addEventListener('click', function () {
+      showQuickVideoInfo();
+    });
+
+    bar.querySelector('#yaktube-bar-help-btn').addEventListener('click', function () {
+      toggleShortcutsModal();
+    });
+  }
+
+  // 4. Global Keydown Listener (Screen-Reader & Turkish Q Optimized)
   window.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       var shortcutsModal = document.getElementById('yaktube-shortcuts-dialog');
@@ -747,12 +852,35 @@
       return;
     }
 
-    if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+    // Help Dialog: Alt+H, F1 or '?' key
+    if ((e.altKey && (e.key === 'h' || e.key === 'H')) || e.key === 'F1' || e.key === '?') {
       if (!isInputFocused()) {
         e.preventDefault();
         toggleShortcutsModal();
         return;
       }
+    }
+
+    // Search Open: Alt+S, Ctrl+K or '/' key (Turkish Q Shift+7)
+    if (
+      ((e.altKey && (e.key === 's' || e.key === 'S')) ||
+        (e.ctrlKey && (e.key === 'k' || e.key === 'K')) ||
+        e.key === '/') &&
+      !isInputFocused()
+    ) {
+      e.preventDefault();
+      openFullSearchModal('', false);
+      return;
+    }
+
+    // Voice Search Open: Alt+V or Shift+V
+    if (
+      ((e.altKey && (e.key === 'v' || e.key === 'V')) || (e.shiftKey && (e.key === 'v' || e.key === 'V'))) &&
+      !isInputFocused()
+    ) {
+      e.preventDefault();
+      openFullSearchModal('', true);
+      return;
     }
 
     if (isInputFocused()) {
@@ -763,9 +891,10 @@
     if (!video) return;
 
     var key = e.key.toLowerCase();
+    var alt = e.altKey;
 
-    // Play / Pause (Space / K)
-    if (key === ' ' || key === 'k') {
+    // Play / Pause (Alt+K, Space or K)
+    if (key === ' ' || key === 'k' || (alt && key === 'k')) {
       e.preventDefault();
       if (video.paused) {
         video.play();
@@ -775,44 +904,44 @@
         announce('Video duraklatıldı.');
       }
     }
-    // Seek 10s Back / Forward (J / L)
-    else if (key === 'j') {
+    // Seek 10s Back / Forward (Alt+J / Alt+L or J / L)
+    else if (key === 'j' || (alt && key === 'j')) {
       e.preventDefault();
       video.currentTime = Math.max(0, video.currentTime - 10);
       announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
-    } else if (key === 'l') {
+    } else if (key === 'l' || (alt && key === 'l')) {
       e.preventDefault();
       video.currentTime = Math.min(video.duration || 99999, video.currentTime + 10);
       announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
     }
-    // Seek 5s Back / Forward (Left / Right Arrow)
-    else if (e.key === 'ArrowLeft') {
+    // Seek 5s Back / Forward (ArrowLeft / ArrowRight or Alt+Left/Right)
+    else if (e.key === 'ArrowLeft' || (alt && e.key === 'ArrowLeft')) {
       e.preventDefault();
       video.currentTime = Math.max(0, video.currentTime - 5);
       announce('5 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
-    } else if (e.key === 'ArrowRight') {
+    } else if (e.key === 'ArrowRight' || (alt && e.key === 'ArrowRight')) {
       e.preventDefault();
       video.currentTime = Math.min(video.duration || 99999, video.currentTime + 5);
       announce('5 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
     }
-    // Volume Up / Down (Up / Down Arrow)
-    else if (e.key === 'ArrowUp') {
+    // Volume Up / Down (ArrowUp / ArrowDown or Alt+Up/Down)
+    else if (e.key === 'ArrowUp' || (alt && e.key === 'ArrowUp')) {
       e.preventDefault();
-      video.volume = Math.min(1, video.volume + 0.05);
+      video.volume = Math.min(1, (video.volume || 1) + 0.05);
       announce('Ses seviyesi yüzde ' + Math.round(video.volume * 100));
-    } else if (e.key === 'ArrowDown') {
+    } else if (e.key === 'ArrowDown' || (alt && e.key === 'ArrowDown')) {
       e.preventDefault();
-      video.volume = Math.max(0, video.volume - 0.05);
+      video.volume = Math.max(0, (video.volume || 1) - 0.05);
       announce('Ses seviyesi yüzde ' + Math.round(video.volume * 100));
     }
-    // Mute (M)
-    else if (key === 'm') {
+    // Mute (Alt+M or M)
+    else if (key === 'm' || (alt && key === 'm')) {
       e.preventDefault();
       video.muted = !video.muted;
       announce(video.muted ? 'Ses kapatıldı (Sessiz).' : 'Ses açıldı.');
     }
-    // Fullscreen (F)
-    else if (key === 'f') {
+    // Fullscreen (Alt+F or F)
+    else if (key === 'f' || (alt && key === 'f')) {
       e.preventDefault();
       if (!document.fullscreenElement) {
         var container = video.closest('.video-js') || video.parentElement || video;
@@ -823,20 +952,20 @@
         announce('Tam ekrandan çıkıldı.');
       }
     }
-    // Theater Mode (T)
-    else if (key === 't') {
+    // Theater Mode (Alt+T or T)
+    else if (key === 't' || (alt && key === 't')) {
       e.preventDefault();
       document.body.classList.toggle('yaktube-theater-mode');
       var isTheater = document.body.classList.contains('yaktube-theater-mode');
       announce(isTheater ? 'Sinema modu açıldı.' : 'Sinema modundan çıkıldı.');
     }
-    // Quick Video Info (I)
-    else if (key === 'i') {
+    // Quick Video Info (Alt+I or I)
+    else if (key === 'i' || (alt && key === 'i')) {
       e.preventDefault();
       showQuickVideoInfo();
     }
-    // Subtitles (C)
-    else if (key === 'c') {
+    // Subtitles (Alt+C or C)
+    else if (key === 'c' || (alt && key === 'c')) {
       e.preventDefault();
       var tracks = video.textTracks;
       if (tracks && tracks.length > 0) {
@@ -847,31 +976,13 @@
         announce('Bu videoda altyazı bulunmuyor.');
       }
     }
-    // Speed Controls (< and > / Shift+, and Shift+.)
-    else if (e.key === '>' || (e.shiftKey && e.key === '.')) {
+    // Speed Controls (Alt+. / Alt+, or > / <)
+    else if ((alt && (e.key === '.' || e.key === '>')) || e.key === '>') {
       e.preventDefault();
-      var curSpeed = video.playbackRate || 1;
-      var nextIdx = speedSteps.findIndex(function (s) {
-        return s > curSpeed;
-      });
-      if (nextIdx !== -1) {
-        video.playbackRate = speedSteps[nextIdx];
-      } else {
-        video.playbackRate = 2;
-      }
-      announce('Oynatma hızı ' + video.playbackRate + ' katına çıkarıldı.');
-    } else if (e.key === '<' || (e.shiftKey && e.key === ',')) {
+      adjustPlaybackSpeed(true);
+    } else if ((alt && (e.key === ',' || e.key === '<')) || e.key === '<') {
       e.preventDefault();
-      var curSpeed = video.playbackRate || 1;
-      var prevSteps = speedSteps.filter(function (s) {
-        return s < curSpeed;
-      });
-      if (prevSteps.length > 0) {
-        video.playbackRate = prevSteps[prevSteps.length - 1];
-      } else {
-        video.playbackRate = 0.25;
-      }
-      announce('Oynatma hızı ' + video.playbackRate + ' katına düşürüldü.');
+      adjustPlaybackSpeed(false);
     }
     // Percentage Jumps (0 - 9)
     else if (key >= '0' && key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {

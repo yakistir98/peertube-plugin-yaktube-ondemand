@@ -843,3 +843,54 @@ body.yaktube-theater-mode .video-js {
 .yaktube-info-toast-row b {
   color: #fff !important;
 }
+
+/* -------------------------------------------------------------------------- */
+/* ACCESSIBLE PLAYER ACTION BAR & SHORTCUTS (v1.4.1)                          */
+/* -------------------------------------------------------------------------- */
+
+.yaktube-player-action-bar {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: center !important;
+  background: #181820 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  margin: 12px 0 16px 0 !important;
+  width: 100% !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+}
+
+.yaktube-player-bar-label {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #ff8f37 !important;
+  margin-right: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.yaktube-player-action-btn {
+  background: #252530 !important;
+  color: #f1f1f1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.yaktube-player-action-btn:hover,
+.yaktube-player-action-btn:focus {
+  background: rgba(255, 143, 55, 0.2) !important;
+  border-color: #ff8f37 !important;
+  color: #fff !important;
+  outline: none !important;
+}
