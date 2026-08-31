@@ -481,6 +481,35 @@
 
     injectYakNetSSO();
 
+    // Replace all login buttons labels and titles
+    document
+      .querySelectorAll(
+        'my-login-link, a[href*="/login"], a[title*="Giriş sayfasına git"], [aria-label*="Giriş sayfasına git"]'
+      )
+      .forEach(function (el) {
+        if (el.getAttribute('title') && el.getAttribute('title').includes('Giriş sayfasına git')) {
+          el.setAttribute('title', 'YakNet ile Giriş Yap');
+        }
+        if (el.getAttribute('aria-label') && el.getAttribute('aria-label').includes('Giriş sayfasına git')) {
+          el.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+        }
+        var anchor = el.tagName.toLowerCase() === 'a' ? el : el.querySelector('a');
+        if (anchor) {
+          anchor.setAttribute('title', 'YakNet ile Giriş Yap');
+          anchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+          var spans = anchor.querySelectorAll('span');
+          spans.forEach(function (s) {
+            if (
+              s.textContent.includes('Giriş sayfasına git') ||
+              s.textContent.trim() === 'Giriş' ||
+              s.textContent.trim() === 'Giriş yap'
+            ) {
+              s.textContent = 'YakNet ile Giriş Yap';
+            }
+          });
+        }
+      });
+
     // Aggressively remove generic Framasoft Open-in-App / Play Store banners
     var genericAppBanners = document.querySelectorAll(
       'my-open-app, my-client-app-banner, .open-app-container, .app-banner, [class*="open-app"], [class*="open-in-app"], .mobile-app-banner, my-open-in-app, .app-promotion, a[href*="play.google.com/store/apps/details?id=app.joinpeertube"], a[href*="f-droid.org"]'
@@ -519,7 +548,8 @@
             .replace(/PeerTube hakkında/gi, 'YakTube Hakkında')
             .replace(/PeerTube'a katılın/gi, "YakTube'a Katılın")
             .replace(/PeerTube örneği/gi, 'YakTube Sunucusu')
-            .replace(/PeerTube/g, 'YakTube');
+            .replace(/PeerTube/g, 'YakTube')
+            .replace(/Giriş sayfasına git/gi, 'YakNet ile Giriş Yap');
         }
       }
     }
