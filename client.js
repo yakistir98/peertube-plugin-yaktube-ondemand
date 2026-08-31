@@ -50,6 +50,52 @@ try {
       }, 50);
     }
 
+    // Load official YakNet Web Component definition
+    if (
+      typeof customElements !== 'undefined' &&
+      !customElements.get('yaknet-account') &&
+      !document.getElementById('yaknet-account-script')
+    ) {
+      var s = document.createElement('script');
+      s.id = 'yaknet-account-script';
+      s.src = 'https://auth.yakhub.com.tr/js/yaknet-account.js';
+      s.async = true;
+      document.head.appendChild(s);
+    }
+
+    // Silent background SSO Probe Engine
+    function initSilentSSOProbe() {
+      var token = localStorage.getItem('access_token');
+      var isManualLogout = sessionStorage.getItem('yaknet_manual_logout');
+      if (
+        token ||
+        isManualLogout ||
+        window.location.search.includes('local=true') ||
+        window.location.search.includes('externalAuthError') ||
+        window.location.pathname.includes('/login')
+      ) {
+        return;
+      }
+
+      var iframeId = 'yaknet-sso-iframe-instance';
+      if (!document.getElementById(iframeId)) {
+        var iframe = document.createElement('iframe');
+        iframe.id = iframeId;
+        iframe.src = 'https://auth.yakhub.com.tr/sdk/sso-frame';
+        iframe.title = 'YakNet Oturum Kontrolü';
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.tabIndex = -1;
+        iframe.style.cssText =
+          'display:none!important;width:0!important;height:0!important;border:0!important;position:absolute!important;pointer-events:none!important;';
+        document.body.appendChild(iframe);
+      }
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSilentSSOProbe);
+    } else {
+      initSilentSSOProbe();
+    }
+
     function triggerYakNetOAuth() {
       sessionStorage.removeItem('yaknet_manual_logout');
       var callbackUrl = 'https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback';
