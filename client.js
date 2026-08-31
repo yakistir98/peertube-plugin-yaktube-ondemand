@@ -2981,3 +2981,132 @@
   });
   checkAndInjectWatchPageComments();
 })();
+
+// 5. Background Play (Screen-Off / Minimize) & MediaSession Lock-Screen Controls
+(function initBackgroundPlaybackEngine() {
+  var videoState = {
+    hasPlayed: false,
+    pausedByUser: false,
+    pausedAt: null
+  };
+
+  function attachVideoListeners(video) {
+    if (!video || video.hasAttribute('data-yaktube-bgplay-hooked')) return;
+    video.setAttribute('data-yaktube-bgplay-hooked', 'true');
+
+    video.addEventListener('play', function () {
+      videoState.hasPlayed = true;
+      videoState.pausedByUser = false;
+      updateMediaSessionMetadata(video);
+    });
+
+    video.addEventListener('pause', function () {
+      videoState.pausedAt = Date.now();
+      // If document is visible when paused, it was paused manually by the user
+      if (!document.hidden) {
+        videoState.pausedByUser = true;
+      }
+    });
+
+    video.addEventListener('ended', function () {
+      videoState.hasPlayed = false;
+      videoState.pausedByUser = true;
+    });
+
+    video.addEventListener('timeupdate', function () {
+      updateMediaSessionPosition(video);
+    });
+  }
+
+  function handleVisibilityChange() {
+    if (!document.hidden) return; // Screen is active
+
+    var video = getVideoElement();
+    if (!video) return;
+
+    // If user hasn't played or deliberately paused, do not auto-resume
+    if (!videoState.hasPlayed || videoState.pausedByUser) return;
+
+    var now = Date.now();
+    if (videoState.pausedAt && now - videoState.pausedAt > 1500 && videoState.pausedByUser) {
+      return;
+    }
+
+    // Resume playback when screen locks or tab switches
+    setTimeout(function () {
+      if (video.paused && !videoState.pausedByUser) {
+        video.play().catch(function () {});
+      }
+    }, 50);
+  }
+
+  document.addEventListener('visibilitychange', handleVisibilityChange, false);
+  document.addEventListener('webkitvisibilitychange', handleVisibilityChange, false);
+
+  // MediaSession API Integration (Lock Screen, Bluetooth, Smart Watches)
+  function updateMediaSessionMetadata(video) {
+    if (!('mediaSession' in navigator)) return;
+
+    var titleEl = document.querySelector('h1.video-title, .video-name, my-video-watch h1, .title');
+    var title = titleEl ? titleEl.textContent.trim() : 'YakTube Video';
+    var authorEl = document.querySelector('.actor-name, .channel-name, .video-channel-name, a.actor-link');
+    var artist = authorEl ? authorEl.textContent.trim() : 'YakTube';
+
+    var artwork = [];
+    var thumbEl = document.querySelector('meta[property="og:image"]');
+    if (thumbEl && thumbEl.content) {
+      artwork.push({ src: thumbEl.content, sizes: '512x512', type: 'image/jpeg' });
+    }
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: title,
+        artist: artist,
+        album: 'YakTube',
+        artwork: artwork
+      });
+
+      navigator.mediaSession.setActionHandler('play', function () {
+        video.play();
+        announce('Video oynatılıyor.');
+      });
+      navigator.mediaSession.setActionHandler('pause', function () {
+        videoState.pausedByUser = true;
+        video.pause();
+        announce('Video duraklatıldı.');
+      });
+      navigator.mediaSession.setActionHandler('seekbackward', function (details) {
+        var skipTime = details.seekOffset || 10;
+        video.currentTime = Math.max(0, video.currentTime - skipTime);
+        announce(skipTime + ' saniye geri sarıldı.');
+      });
+      navigator.mediaSession.setActionHandler('seekforward', function (details) {
+        var skipTime = details.seekOffset || 10;
+        video.currentTime = Math.min(video.duration || 99999, video.currentTime + skipTime);
+        announce(skipTime + ' saniye ileri sarıldı.');
+      });
+      navigator.mediaSession.setActionHandler('stop', function () {
+        videoState.pausedByUser = true;
+        video.pause();
+      });
+    } catch (e) {}
+  }
+
+  function updateMediaSessionPosition(video) {
+    if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+    if (isNaN(video.duration) || isNaN(video.currentTime) || video.duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: video.duration,
+        playbackRate: video.playbackRate || 1,
+        position: Math.min(video.currentTime, video.duration)
+      });
+    } catch (e) {}
+  }
+
+  // Auto-hook active video elements
+  setInterval(function () {
+    var video = getVideoElement();
+    if (video) attachVideoListeners(video);
+  }, 1000);
+})();
