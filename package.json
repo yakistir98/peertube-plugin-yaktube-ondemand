@@ -1,14 +1,17 @@
 {
   "name": "peertube-plugin-yaktube-ondemand",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Accessible On-Demand YouTube Import, Live Streams, Smart Recommendations and A11y Engine for PeerTube",
   "main": "main.js",
+  "library": "./main.js",
+  "staticDirs": {},
+  "translations": {},
   "clientScripts": [
     {
+      "script": "client.js",
       "scopes": [
         "common"
-      ],
-      "script": "client.js"
+      ]
     }
   ],
   "css": [
@@ -39,5 +42,6 @@
     "url": "https://github.com/yakistir98/peertube-plugin-yaktube-ondemand.git"
   },
   "homepage": "https://yaktube.yakhub.com.tr",
+  "bugs": "https://github.com/yakistir98/peertube-plugin-yaktube-ondemand/issues",
   "license": "AGPL-3.0-or-later"
 }
