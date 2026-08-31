@@ -880,7 +880,22 @@ try {
     }
 
     function getVideoElement() {
-      return document.querySelector('video');
+      // 1. Direct video tag in DOM
+      var v = document.querySelector('video');
+      if (v) return v;
+
+      // 2. Video inside iframes (e.g. embed player)
+      var iframes = document.querySelectorAll('iframe');
+      for (var i = 0; i < iframes.length; i++) {
+        try {
+          var doc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+          if (doc) {
+            var iv = doc.querySelector('video');
+            if (iv) return iv;
+          }
+        } catch (e) {}
+      }
+      return null;
     }
 
     function formatTime(seconds) {
