@@ -283,86 +283,104 @@
     var isAuth = !!token && !!uName;
 
     if (headerRight) {
+      var defaultLoginLink = headerRight.querySelector('my-login-link, a[href*="/login"], .login-button');
       var liveWidget = headerRight.querySelector('#yaknet-header-account-widget');
-      if (!liveWidget) {
-        var widgetWrap = document.createElement('div');
-        widgetWrap.id = 'yaknet-header-account-widget';
-        widgetWrap.className = 'yaknet-header-widget';
-        widgetWrap.style.display = 'inline-flex';
-        widgetWrap.style.alignItems = 'center';
-        widgetWrap.style.marginRight = '8px';
 
-        widgetWrap.innerHTML =
-          '<yaknet-account ' +
-          'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
-          'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
-          'base-url="https://auth.yakhub.com.tr" ' +
-          'login-url="/login" ' +
-          'authenticated="' +
-          (isAuth ? 'true' : 'false') +
-          '" ' +
-          'user-name="' +
-          (isAuth ? displayName.replace(/"/g, '&quot;') : '') +
-          '" ' +
-          'user-email="' +
-          (isAuth ? emailStr.replace(/"/g, '&quot;') : '') +
-          '" ' +
-          'theme="dark">' +
-          '</yaknet-account>';
-
-        var targetSibling =
-          headerRight.querySelector('my-user-menu') ||
-          headerRight.querySelector('my-login-link') ||
-          headerRight.querySelector('.user-menu') ||
-          headerRight.querySelector('.settings-button') ||
-          headerRight.querySelector('my-user-notifications') ||
-          headerRight.querySelector('my-notification-bell');
-
-        if (targetSibling && targetSibling.parentElement === headerRight) {
-          headerRight.insertBefore(widgetWrap, targetSibling);
-        } else {
-          headerRight.prepend(widgetWrap);
-        }
-
-        var defaultLoginLink = headerRight.querySelector('my-login-link');
+      if (isAuth) {
+        // Logged In: Show YakNet Profile Menu, Hide default login link
         if (defaultLoginLink) {
-          defaultLoginLink.setAttribute('aria-hidden', 'true');
-          defaultLoginLink.setAttribute('tabindex', '-1');
           defaultLoginLink.style.display = 'none';
+          defaultLoginLink.setAttribute('aria-hidden', 'true');
         }
-      } else {
-        // Sync widget attributes dynamically if auth state changed
-        var el = liveWidget.querySelector('yaknet-account');
-        if (el) {
-          if (el.shadowRoot) {
-            var shadowLogoutBtn =
-              el.shadowRoot.getElementById('logoutBtn') ||
-              el.shadowRoot.querySelector('.yn-logout-btn') ||
-              el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
-            if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
-              shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
-              shadowLogoutBtn.addEventListener(
-                'click',
-                function (ev) {
-                  ev.preventDefault();
-                  ev.stopPropagation();
-                  performUnifiedLogout();
-                },
-                true
-              );
+
+        if (!liveWidget) {
+          var widgetWrap = document.createElement('div');
+          widgetWrap.id = 'yaknet-header-account-widget';
+          widgetWrap.className = 'yaknet-header-widget';
+          widgetWrap.style.display = 'inline-flex';
+          widgetWrap.style.alignItems = 'center';
+          widgetWrap.style.marginRight = '8px';
+
+          widgetWrap.innerHTML =
+            '<yaknet-account ' +
+            'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
+            'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
+            'base-url="https://auth.yakhub.com.tr" ' +
+            'login-url="/login" ' +
+            'authenticated="true" ' +
+            'user-name="' +
+            displayName.replace(/"/g, '&quot;') +
+            '" ' +
+            'user-email="' +
+            emailStr.replace(/"/g, '&quot;') +
+            '" ' +
+            'theme="dark">' +
+            '</yaknet-account>';
+
+          var targetSibling =
+            headerRight.querySelector('my-user-menu') ||
+            headerRight.querySelector('.user-menu') ||
+            headerRight.querySelector('.settings-button') ||
+            headerRight.querySelector('my-user-notifications') ||
+            headerRight.querySelector('my-notification-bell');
+
+          if (targetSibling && targetSibling.parentElement === headerRight) {
+            headerRight.insertBefore(widgetWrap, targetSibling);
+          } else {
+            headerRight.prepend(widgetWrap);
+          }
+        } else {
+          var el = liveWidget.querySelector('yaknet-account');
+          if (el) {
+            if (el.shadowRoot) {
+              var shadowLogoutBtn =
+                el.shadowRoot.getElementById('logoutBtn') ||
+                el.shadowRoot.querySelector('.yn-logout-btn') ||
+                el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
+              if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
+                shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
+                shadowLogoutBtn.addEventListener(
+                  'click',
+                  function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    performUnifiedLogout();
+                  },
+                  true
+                );
+              }
+            }
+
+            if (el.getAttribute('authenticated') !== 'true' || el.getAttribute('user-name') !== displayName) {
+              el.setAttribute('authenticated', 'true');
+              el.setAttribute('user-name', displayName);
+              el.setAttribute('user-email', emailStr);
+              if (typeof el.syncStateFromAttributes === 'function') {
+                el.syncStateFromAttributes();
+                el.render();
+              }
             }
           }
+        }
+      } else {
+        // Not Logged In: Remove YakNet widget to eliminate duplicate button, keep PeerTube native login button clean
+        if (liveWidget) {
+          liveWidget.remove();
+        }
+        if (defaultLoginLink) {
+          defaultLoginLink.style.display = '';
+          defaultLoginLink.removeAttribute('aria-hidden');
 
-          var expectedAuth = isAuth ? 'true' : 'false';
-          var expectedName = isAuth ? displayName : '';
-          var expectedEmail = isAuth ? emailStr : '';
-          if (el.getAttribute('authenticated') !== expectedAuth || el.getAttribute('user-name') !== expectedName) {
-            el.setAttribute('authenticated', expectedAuth);
-            el.setAttribute('user-name', expectedName);
-            el.setAttribute('user-email', expectedEmail);
-            if (typeof el.syncStateFromAttributes === 'function') {
-              el.syncStateFromAttributes();
-              el.render();
+          var loginAnchor =
+            defaultLoginLink.tagName.toLowerCase() === 'a' ? defaultLoginLink : defaultLoginLink.querySelector('a');
+          if (loginAnchor) {
+            loginAnchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+            loginAnchor.setAttribute('title', 'YakNet Hesabınız ile Giriş Yapın');
+            var spanText = loginAnchor.querySelector('span');
+            if (spanText) {
+              spanText.textContent = 'YakNet ile Giriş Yap';
+            } else {
+              loginAnchor.textContent = 'YakNet ile Giriş Yap';
             }
           }
         }
