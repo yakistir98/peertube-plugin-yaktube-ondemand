@@ -1823,6 +1823,125 @@
   var activeVoiceRec = null;
   var isVoiceListening = false;
 
+  // Dynamic Search History & Trending Helpers
+  function getRecentSearches() {
+    try {
+      var data = localStorage.getItem('yaktube_recent_searches');
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveRecentSearch(query) {
+    if (!query || query.trim().length < 2) return;
+    var q = query.trim();
+    try {
+      var list = getRecentSearches();
+      list = list.filter(function (item) {
+        return item.toLowerCase() !== q.toLowerCase();
+      });
+      list.unshift(q);
+      if (list.length > 8) list = list.slice(0, 8);
+      localStorage.setItem('yaktube_recent_searches', JSON.stringify(list));
+    } catch (e) {}
+  }
+
+  function clearRecentSearches() {
+    try {
+      localStorage.removeItem('yaktube_recent_searches');
+    } catch (e) {}
+    renderDynamicSearchChips();
+    announce('Arama geçmişi temizlendi.');
+  }
+
+  var popularTrendingQueries = [
+    { title: '🎵 Türkçe Pop', q: 'Türkçe Pop' },
+    { title: '🎸 Anadolu Rock', q: 'Anadolu Rock' },
+    { title: '🤖 Yapay Zeka', q: 'Yapay Zeka' },
+    { title: '💻 Yazılım Dersleri', q: 'Yazılım Dersleri' },
+    { title: '🎧 Sesli Kitap & Radyo Tiyatrosu', q: 'Sesli Kitap' },
+    { title: '📺 Canlı Haber', q: 'Canlı Haber' },
+    { title: '🌍 Bilim & Belgesel', q: 'Bilim Belgeseli' },
+    { title: '🎼 Akustik Canlı Performans', q: 'Akustik Canlı' },
+    { title: '🎙️ Podcast & Söyleşi', q: 'Podcast Türkçe' }
+  ];
+
+  function renderDynamicSearchChips() {
+    var modal = document.getElementById('yaktube-full-search-modal');
+    if (!modal) return;
+
+    var container = modal.querySelector('#yaktube-modal-dynamic-chips-section');
+    if (!container) return;
+
+    var recent = getRecentSearches();
+    var html = '';
+
+    // 1. Recent searches section (if any)
+    if (recent.length > 0) {
+      html +=
+        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">' +
+        '<div class="yaktube-modal-section-title" style="margin-bottom: 0;">🕒 Son Aramalarınız</div>' +
+        '<button id="yaktube-clear-recent-btn" style="background: transparent; border: none; color: #ff8f37; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline;" aria-label="Arama geçmişini temizle">Geçmişi Temizle</button>' +
+        '</div>' +
+        '<div class="yaktube-modal-chips-grid" style="margin-bottom: 18px;">';
+
+      recent.forEach(function (term) {
+        var safeTerm = term.replace(/"/g, '&quot;');
+        html +=
+          '<button class="yaktube-modal-chip yaktube-recent-chip" data-query="' +
+          safeTerm +
+          '" aria-label="Son arama: ' +
+          safeTerm +
+          '">🕒 ' +
+          safeTerm +
+          '</button>';
+      });
+      html += '</div>';
+    }
+
+    // 2. Popular & Trending searches section
+    html +=
+      '<div class="yaktube-modal-section-title">🔥 Hızlı ve Popüler Aramalar</div>' +
+      '<div class="yaktube-modal-chips-grid">';
+
+    popularTrendingQueries.forEach(function (item) {
+      var safeQ = item.q.replace(/"/g, '&quot;');
+      html +=
+        '<button class="yaktube-modal-chip" data-query="' +
+        safeQ +
+        '" aria-label="Popüler arama: ' +
+        safeQ +
+        '">' +
+        item.title +
+        '</button>';
+    });
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Attach click events
+    container.querySelectorAll('.yaktube-modal-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var query = chip.getAttribute('data-query');
+        var inp = modal.querySelector('#yaktube-modal-input');
+        if (inp) inp.value = query;
+        if (typeof window.__yaktube_execute_search__ === 'function') {
+          window.__yaktube_execute_search__(query);
+        }
+      });
+    });
+
+    var clearBtn = container.querySelector('#yaktube-clear-recent-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        clearRecentSearches();
+      });
+    }
+  }
+
   function createFullSearchModal() {
     var existingModal = document.getElementById('yaktube-full-search-modal');
     if (existingModal) return existingModal;
@@ -1911,11 +2030,14 @@
     function executeSearch(query) {
       var q = (query || inp.value || '').trim();
       if (q) {
+        saveRecentSearch(q);
         announce('"' + q + '" için arama yapılıyor...', true);
         closeFullSearchModal();
         window.location.href = '/search/videos?search=' + encodeURIComponent(q);
       }
     }
+    window.__yaktube_execute_search__ = executeSearch;
+    renderDynamicSearchChips();
 
     submitBtn.addEventListener('click', function () {
       executeSearch();
@@ -1955,6 +2077,7 @@
     var modal = createFullSearchModal();
     modal.classList.add('yaktube-modal-open');
     modal.style.display = 'flex';
+    renderDynamicSearchChips();
 
     var inp = modal.querySelector('#yaktube-modal-input');
     var clearBtn = modal.querySelector('#yaktube-modal-clear-btn');
