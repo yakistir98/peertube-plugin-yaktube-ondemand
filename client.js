@@ -287,101 +287,78 @@ try {
         var defaultLoginLink = headerRight.querySelector('my-login-link, a[href*="/login"], .login-button');
         var liveWidget = headerRight.querySelector('#yaknet-header-account-widget');
 
-        if (isAuth) {
-          // Logged In: Show YakNet Profile Menu, Hide default login link
-          if (defaultLoginLink) {
-            defaultLoginLink.style.display = 'none';
-            defaultLoginLink.setAttribute('aria-hidden', 'true');
-          }
+        // Always hide duplicate native login link in favor of unified YakNet component
+        if (defaultLoginLink) {
+          defaultLoginLink.style.display = 'none';
+          defaultLoginLink.setAttribute('aria-hidden', 'true');
+        }
 
-          if (!liveWidget) {
-            var widgetWrap = document.createElement('div');
-            widgetWrap.id = 'yaknet-header-account-widget';
-            widgetWrap.className = 'yaknet-header-widget';
-            widgetWrap.style.display = 'inline-flex';
-            widgetWrap.style.alignItems = 'center';
-            widgetWrap.style.marginRight = '8px';
+        if (!liveWidget) {
+          var widgetWrap = document.createElement('div');
+          widgetWrap.id = 'yaknet-header-account-widget';
+          widgetWrap.className = 'yaknet-header-widget';
+          widgetWrap.style.display = 'inline-flex';
+          widgetWrap.style.alignItems = 'center';
+          widgetWrap.style.marginRight = '8px';
 
-            widgetWrap.innerHTML =
-              '<yaknet-account ' +
-              'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
-              'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
-              'base-url="https://auth.yakhub.com.tr" ' +
-              'login-url="/login" ' +
-              'authenticated="true" ' +
-              'user-name="' +
-              displayName.replace(/"/g, '&quot;') +
-              '" ' +
-              'user-email="' +
-              emailStr.replace(/"/g, '&quot;') +
-              '" ' +
-              'theme="dark">' +
-              '</yaknet-account>';
+          widgetWrap.innerHTML =
+            '<yaknet-account ' +
+            'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
+            'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
+            'base-url="https://auth.yakhub.com.tr" ' +
+            'login-url="https://auth.yakhub.com.tr/oauth/authorize?client_id=01a03c41-f758-721e-b927-619bffde5c23&redirect_uri=https%3A%2F%2Fyaktube.yakhub.com.tr%2Fplugins%2Fpeertube-plugin-auth-yaknet%2Frouter%2Fauth-callback&response_type=code&scope=" ' +
+            (isAuth ? 'authenticated="true" ' : 'authenticated="false" ') +
+            'user-name="' +
+            displayName.replace(/"/g, '&quot;') +
+            '" ' +
+            'user-email="' +
+            emailStr.replace(/"/g, '&quot;') +
+            '" ' +
+            'theme="dark">' +
+            '</yaknet-account>';
 
-            var targetSibling =
-              headerRight.querySelector('my-user-menu') ||
-              headerRight.querySelector('.user-menu') ||
-              headerRight.querySelector('.settings-button') ||
-              headerRight.querySelector('my-user-notifications') ||
-              headerRight.querySelector('my-notification-bell');
+          var targetSibling =
+            headerRight.querySelector('my-user-menu') ||
+            headerRight.querySelector('.user-menu') ||
+            headerRight.querySelector('.settings-button') ||
+            headerRight.querySelector('my-user-notifications') ||
+            headerRight.querySelector('my-notification-bell');
 
-            if (targetSibling && targetSibling.parentElement === headerRight) {
-              headerRight.insertBefore(widgetWrap, targetSibling);
-            } else {
-              headerRight.prepend(widgetWrap);
-            }
+          if (targetSibling && targetSibling.parentElement === headerRight) {
+            headerRight.insertBefore(widgetWrap, targetSibling);
           } else {
-            var el = liveWidget.querySelector('yaknet-account');
-            if (el) {
-              if (el.shadowRoot) {
-                var shadowLogoutBtn =
-                  el.shadowRoot.getElementById('logoutBtn') ||
-                  el.shadowRoot.querySelector('.yn-logout-btn') ||
-                  el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
-                if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
-                  shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
-                  shadowLogoutBtn.addEventListener(
-                    'click',
-                    function (ev) {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      performUnifiedLogout();
-                    },
-                    true
-                  );
-                }
-              }
-
-              if (el.getAttribute('authenticated') !== 'true' || el.getAttribute('user-name') !== displayName) {
-                el.setAttribute('authenticated', 'true');
-                el.setAttribute('user-name', displayName);
-                el.setAttribute('user-email', emailStr);
-                if (typeof el.syncStateFromAttributes === 'function') {
-                  el.syncStateFromAttributes();
-                  el.render();
-                }
-              }
-            }
+            headerRight.prepend(widgetWrap);
           }
         } else {
-          // Not Logged In: Remove YakNet widget to eliminate duplicate button, keep PeerTube native login button clean
-          if (liveWidget) {
-            liveWidget.remove();
-          }
-          if (defaultLoginLink) {
-            defaultLoginLink.style.display = '';
-            defaultLoginLink.removeAttribute('aria-hidden');
+          var el = liveWidget.querySelector('yaknet-account');
+          if (el) {
+            var authAttr = isAuth ? 'true' : 'false';
+            if (el.getAttribute('authenticated') !== authAttr || el.getAttribute('user-name') !== displayName) {
+              el.setAttribute('authenticated', authAttr);
+              el.setAttribute('user-name', displayName);
+              el.setAttribute('user-email', emailStr);
+              if (typeof el.syncStateFromAttributes === 'function') {
+                el.syncStateFromAttributes();
+                el.render();
+              }
+            }
 
-            var loginAnchor =
-              defaultLoginLink.tagName.toLowerCase() === 'a' ? defaultLoginLink : defaultLoginLink.querySelector('a');
-            if (loginAnchor) {
-              loginAnchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
-              loginAnchor.setAttribute('title', 'YakNet Hesabınız ile Giriş Yapın');
-              var spanText = loginAnchor.querySelector('span');
-              if (spanText) {
-                spanText.textContent = 'YakNet ile Giriş Yap';
-              } else {
-                loginAnchor.textContent = 'YakNet ile Giriş Yap';
+            if (el.shadowRoot) {
+              var shadowLogoutBtn =
+                el.shadowRoot.getElementById('logoutBtn') ||
+                el.shadowRoot.querySelector('.yn-logout-btn') ||
+                el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
+              if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
+                shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
+                shadowLogoutBtn.addEventListener(
+                  'click',
+                  function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    performUnifiedLogout();
+                  },
+                  true
+                );
               }
             }
           }
@@ -3019,8 +2996,8 @@ try {
   (function initBackgroundPlaybackEngine() {
     var videoState = {
       hasPlayed: false,
-      pausedByUser: false,
-      pausedAt: null
+      explicitlyPausedByClick: false,
+      lastPlayTime: 0
     };
 
     function attachVideoListeners(video) {
@@ -3029,21 +3006,14 @@ try {
 
       video.addEventListener('play', function () {
         videoState.hasPlayed = true;
-        videoState.pausedByUser = false;
+        videoState.explicitlyPausedByClick = false;
+        videoState.lastPlayTime = Date.now();
         updateMediaSessionMetadata(video);
-      });
-
-      video.addEventListener('pause', function () {
-        videoState.pausedAt = Date.now();
-        // If document is visible when paused, it was paused manually by the user
-        if (!document.hidden) {
-          videoState.pausedByUser = true;
-        }
       });
 
       video.addEventListener('ended', function () {
         videoState.hasPlayed = false;
-        videoState.pausedByUser = true;
+        videoState.explicitlyPausedByClick = true;
       });
 
       video.addEventListener('timeupdate', function () {
@@ -3051,30 +3021,50 @@ try {
       });
     }
 
-    function handleVisibilityChange() {
-      if (!document.hidden) return; // Screen is active
+    // Hook manual play/pause buttons
+    document.addEventListener(
+      'click',
+      function (e) {
+        var target = e.target;
+        if (!target) return;
+        var btn = target.closest(
+          '.vjs-play-control, button[title*="Duraklat"], button[aria-label*="Duraklat"], #yaktube-bar-play-btn'
+        );
+        if (btn) {
+          var video = getVideoElement();
+          if (video && !video.paused) {
+            videoState.explicitlyPausedByClick = true;
+          }
+        }
+      },
+      true
+    );
 
+    function handleVisibilityChange() {
       var video = getVideoElement();
       if (!video) return;
 
-      // If user hasn't played or deliberately paused, do not auto-resume
-      if (!videoState.hasPlayed || videoState.pausedByUser) return;
-
-      var now = Date.now();
-      if (videoState.pausedAt && now - videoState.pausedAt > 1500 && videoState.pausedByUser) {
-        return;
-      }
-
-      // Resume playback when screen locks or tab switches
-      setTimeout(function () {
-        if (video.paused && !videoState.pausedByUser) {
-          video.play().catch(function () {});
+      // When screen turns off / tab is hidden:
+      if (document.hidden || document.webkitHidden) {
+        if (videoState.hasPlayed && !videoState.explicitlyPausedByClick) {
+          // Unconditionally keep audio stream active
+          setTimeout(function () {
+            if (video.paused && !videoState.explicitlyPausedByClick) {
+              video.play().catch(function () {});
+            }
+          }, 100);
+          setTimeout(function () {
+            if (video.paused && !videoState.explicitlyPausedByClick) {
+              video.play().catch(function () {});
+            }
+          }, 300);
         }
-      }, 50);
+      }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange, false);
     document.addEventListener('webkitvisibilitychange', handleVisibilityChange, false);
+    window.addEventListener('pagehide', handleVisibilityChange, false);
 
     // MediaSession API Integration (Lock Screen, Bluetooth, Smart Watches)
     function updateMediaSessionMetadata(video) {
