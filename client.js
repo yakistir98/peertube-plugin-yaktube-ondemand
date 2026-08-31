@@ -1827,10 +1827,17 @@
   function getRecentSearches() {
     try {
       var data = localStorage.getItem('yaktube_recent_searches');
-      return data ? JSON.parse(data) : [];
-    } catch (e) {
-      return [];
-    }
+      if (data) {
+        var parsed = JSON.parse(data);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    // Default initial recent searches for first-time visitors
+    var defaults = ['Tarkan', 'Barış Manço', 'Yapay Zeka', 'Canlı Haber'];
+    try {
+      localStorage.setItem('yaktube_recent_searches', JSON.stringify(defaults));
+    } catch (e) {}
+    return defaults;
   }
 
   function saveRecentSearch(query) {
@@ -1866,6 +1873,19 @@
     { title: '🎼 Akustik Canlı Performans', q: 'Akustik Canlı' },
     { title: '🎙️ Podcast & Söyleşi', q: 'Podcast Türkçe' }
   ];
+
+  // Auto capture search query from URL into recent searches
+  function captureUrlSearchQuery() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var q = params.get('search') || params.get('q');
+      if (q && q.trim().length >= 2) {
+        saveRecentSearch(q.trim());
+      }
+    } catch (e) {}
+  }
+  captureUrlSearchQuery();
+  window.addEventListener('popstate', captureUrlSearchQuery);
 
   function renderDynamicSearchChips() {
     var modal = document.getElementById('yaktube-full-search-modal');
@@ -1970,17 +1990,7 @@
       '<div id="yaktube-modal-voice-transcript" class="yaktube-modal-voice-transcript">Lütfen aramak istediğiniz videoyu söyleyin...</div>' +
       '<button id="yaktube-modal-mic-pulse" class="yaktube-modal-mic-pulse-btn" aria-label="Mikrofonu durdur">🎙️</button>' +
       '</div>' +
-      '<div class="yaktube-modal-section-title">🔥 Hızlı ve Popüler Aramalar</div>' +
-      '<div class="yaktube-modal-chips-grid">' +
-      '<button class="yaktube-modal-chip" data-query="Tarkan">🎵 Tarkan</button>' +
-      '<button class="yaktube-modal-chip" data-query="Barış Manço">🎸 Barış Manço</button>' +
-      '<button class="yaktube-modal-chip" data-query="Python Dersleri">💻 Python Dersleri</button>' +
-      '<button class="yaktube-modal-chip" data-query="Yapay Zeka">🤖 Yapay Zeka</button>' +
-      '<button class="yaktube-modal-chip" data-query="Sesli Kitap">🎧 Sesli Kitap</button>' +
-      '<button class="yaktube-modal-chip" data-query="Canlı Haber">📺 Canlı Haber</button>' +
-      '<button class="yaktube-modal-chip" data-query="Gitar Dersi">🎼 Gitar Dersi</button>' +
-      '<button class="yaktube-modal-chip" data-query="Bilim Belgeseli">🌍 Bilim Belgeseli</button>' +
-      '</div>' +
+      '<div id="yaktube-modal-dynamic-chips-section"></div>' +
       '<div class="yaktube-modal-hint-footer">' +
       '<span>💡 <b>Enter</b> ile ara, <b>Shift+V</b> ile sesli ara</span>' +
       '<span><b>Escape</b> ile kapat</span>' +
