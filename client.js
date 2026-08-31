@@ -2889,7 +2889,12 @@
     headerButtons.prepend(installBtn);
   }
 
+  function isYakTubeInstance() {
+    return window.location.hostname.includes('yaktube.yakhub.com.tr') || getInstanceName() === 'YakTube';
+  }
+
   function injectApkDownloadButton() {
+    if (!isYakTubeInstance()) return;
     // 1. If inside APK: NEVER show APK button
     if (isInsideYakTubeApp) {
       var existBtnApp = document.getElementById('yaktube-apk-download-btn');
@@ -2934,6 +2939,7 @@
   }
 
   function injectSidebarApkLink() {
+    if (!isYakTubeInstance()) return;
     // If inside APK: NEVER show in sidebar
     if (isInsideYakTubeApp) {
       var existLink = document.getElementById('yaktube-sidebar-apk-link');
