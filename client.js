@@ -287,78 +287,104 @@ try {
         var defaultLoginLink = headerRight.querySelector('my-login-link, a[href*="/login"], .login-button');
         var liveWidget = headerRight.querySelector('#yaknet-header-account-widget');
 
-        // Always hide duplicate native login link in favor of unified YakNet component
-        if (defaultLoginLink) {
-          defaultLoginLink.style.display = 'none';
-          defaultLoginLink.setAttribute('aria-hidden', 'true');
-        }
-
-        if (!liveWidget) {
-          var widgetWrap = document.createElement('div');
-          widgetWrap.id = 'yaknet-header-account-widget';
-          widgetWrap.className = 'yaknet-header-widget';
-          widgetWrap.style.display = 'inline-flex';
-          widgetWrap.style.alignItems = 'center';
-          widgetWrap.style.marginRight = '8px';
-
-          widgetWrap.innerHTML =
-            '<yaknet-account ' +
-            'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
-            'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
-            'base-url="https://auth.yakhub.com.tr" ' +
-            'login-url="https://auth.yakhub.com.tr/oauth/authorize?client_id=01a03c41-f758-721e-b927-619bffde5c23&redirect_uri=https%3A%2F%2Fyaktube.yakhub.com.tr%2Fplugins%2Fpeertube-plugin-auth-yaknet%2Frouter%2Fauth-callback&response_type=code&scope=" ' +
-            (isAuth ? 'authenticated="true" ' : 'authenticated="false" ') +
-            'user-name="' +
-            displayName.replace(/"/g, '&quot;') +
-            '" ' +
-            'user-email="' +
-            emailStr.replace(/"/g, '&quot;') +
-            '" ' +
-            'theme="dark">' +
-            '</yaknet-account>';
-
-          var targetSibling =
-            headerRight.querySelector('my-user-menu') ||
-            headerRight.querySelector('.user-menu') ||
-            headerRight.querySelector('.settings-button') ||
-            headerRight.querySelector('my-user-notifications') ||
-            headerRight.querySelector('my-notification-bell');
-
-          if (targetSibling && targetSibling.parentElement === headerRight) {
-            headerRight.insertBefore(widgetWrap, targetSibling);
-          } else {
-            headerRight.prepend(widgetWrap);
+        if (isAuth) {
+          // 1. AUTHENTICATED: Hide native login link, Show YakNet Account Profile Menu
+          if (defaultLoginLink) {
+            defaultLoginLink.style.display = 'none';
+            defaultLoginLink.setAttribute('aria-hidden', 'true');
           }
-        } else {
-          var el = liveWidget.querySelector('yaknet-account');
-          if (el) {
-            var authAttr = isAuth ? 'true' : 'false';
-            if (el.getAttribute('authenticated') !== authAttr || el.getAttribute('user-name') !== displayName) {
-              el.setAttribute('authenticated', authAttr);
-              el.setAttribute('user-name', displayName);
-              el.setAttribute('user-email', emailStr);
-              if (typeof el.syncStateFromAttributes === 'function') {
-                el.syncStateFromAttributes();
-                el.render();
+
+          if (!liveWidget) {
+            var widgetWrap = document.createElement('div');
+            widgetWrap.id = 'yaknet-header-account-widget';
+            widgetWrap.className = 'yaknet-header-widget';
+            widgetWrap.style.display = 'inline-flex';
+            widgetWrap.style.alignItems = 'center';
+            widgetWrap.style.marginRight = '8px';
+
+            widgetWrap.innerHTML =
+              '<yaknet-account ' +
+              'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
+              'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
+              'base-url="https://auth.yakhub.com.tr" ' +
+              'login-url="/login" ' +
+              'authenticated="true" ' +
+              'user-name="' +
+              displayName.replace(/"/g, '&quot;') +
+              '" ' +
+              'user-email="' +
+              emailStr.replace(/"/g, '&quot;') +
+              '" ' +
+              'theme="dark">' +
+              '</yaknet-account>';
+
+            var targetSibling =
+              headerRight.querySelector('my-user-menu') ||
+              headerRight.querySelector('.user-menu') ||
+              headerRight.querySelector('.settings-button') ||
+              headerRight.querySelector('my-user-notifications') ||
+              headerRight.querySelector('my-notification-bell');
+
+            if (targetSibling && targetSibling.parentElement === headerRight) {
+              headerRight.insertBefore(widgetWrap, targetSibling);
+            } else {
+              headerRight.prepend(widgetWrap);
+            }
+          } else {
+            var el = liveWidget.querySelector('yaknet-account');
+            if (el) {
+              if (el.getAttribute('authenticated') !== 'true' || el.getAttribute('user-name') !== displayName) {
+                el.setAttribute('authenticated', 'true');
+                el.setAttribute('user-name', displayName);
+                el.setAttribute('user-email', emailStr);
+                if (typeof el.syncStateFromAttributes === 'function') {
+                  el.syncStateFromAttributes();
+                  el.render();
+                }
+              }
+
+              if (el.shadowRoot) {
+                var shadowLogoutBtn =
+                  el.shadowRoot.getElementById('logoutBtn') ||
+                  el.shadowRoot.querySelector('.yn-logout-btn') ||
+                  el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
+                if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
+                  shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
+                  shadowLogoutBtn.addEventListener(
+                    'click',
+                    function (ev) {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      performUnifiedLogout();
+                    },
+                    true
+                  );
+                }
               }
             }
+          }
+        } else {
+          // 2. GUEST / NOT LOGGED IN:
+          // A. Physically remove any <yaknet-account> widget from DOM to guarantee zero shadow DOM duplicate buttons
+          if (liveWidget) {
+            liveWidget.remove();
+          }
 
-            if (el.shadowRoot) {
-              var shadowLogoutBtn =
-                el.shadowRoot.getElementById('logoutBtn') ||
-                el.shadowRoot.querySelector('.yn-logout-btn') ||
-                el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
-              if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
-                shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
-                shadowLogoutBtn.addEventListener(
-                  'click',
-                  function (ev) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    performUnifiedLogout();
-                  },
-                  true
-                );
+          // B. Ensure PeerTube's native login link is the ONLY single accessible login element
+          if (defaultLoginLink) {
+            defaultLoginLink.style.display = '';
+            defaultLoginLink.removeAttribute('aria-hidden');
+
+            var loginAnchor =
+              defaultLoginLink.tagName.toLowerCase() === 'a' ? defaultLoginLink : defaultLoginLink.querySelector('a');
+            if (loginAnchor) {
+              loginAnchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+              loginAnchor.setAttribute('title', 'YakNet ile Giriş Yap');
+              var spanText = loginAnchor.querySelector('span');
+              if (spanText) {
+                spanText.textContent = 'YakNet ile Giriş Yap';
+              } else {
+                loginAnchor.textContent = 'YakNet ile Giriş Yap';
               }
             }
           }
