@@ -2,6 +2,10 @@ try {
   (function () {
     if (window.__YAKTUBE_ENGINE_LOADED__) return;
     window.__YAKTUBE_ENGINE_LOADED__ = true;
+    try {
+      localStorage.setItem('hide-mobile-msg', 'true');
+      sessionStorage.setItem('hide-mobile-msg', 'true');
+    } catch (e) {}
     console.log('[YakTube] YakNet SSO, Custom Branding, A11y & On-Demand Engine Active');
 
     // Dynamic Instance Name Helper
@@ -563,6 +567,13 @@ try {
         });
 
       // Aggressively remove generic Framasoft Open-in-App / Play Store banners
+      document
+        .querySelectorAll(
+          '.mobile-msg, [class*="mobile-msg"], button[title*="Bu mesajı kapat"], button[aria-label*="Bu mesajı kapat"]'
+        )
+        .forEach(function (m) {
+          m.remove();
+        });
       var genericAppBanners = document.querySelectorAll(
         'my-open-app, my-client-app-banner, .open-app-container, .app-banner, [class*="open-app"], [class*="open-in-app"], .mobile-app-banner, my-open-in-app, .app-promotion, a[href*="play.google.com/store/apps/details?id=app.joinpeertube"], a[href*="f-droid.org"]'
       );

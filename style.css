@@ -1,3 +1,25 @@
+/* 100% Elimination of PeerTube Mobile Open-in-App Banner & Close Button */
+.mobile-msg,
+my-header .mobile-msg,
+[class*='mobile-msg'],
+button[title*='Bu mesajı kapat'],
+button[aria-label*='Bu mesajı kapat'],
+button[title*='Dismiss'],
+.msg.ellipsis,
+.peertube-button-link.secondary-button {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  position: absolute !important;
+  z-index: -99999 !important;
+  clip: rect(0, 0, 0, 0) !important;
+}
+
 /* Permanent Aggressive Suppression of Generic JoinPeerTube / Framasoft Open-in-App Banners */
 my-open-app,
 my-open-in-app,
