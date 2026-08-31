@@ -152,6 +152,117 @@
     true
   );
 
+  // 2.3 Dedicated Local Admin Login Modal (Alt+A)
+  function openLocalAdminLoginModal() {
+    var existingModal = document.getElementById('yaktube-admin-login-modal');
+    if (existingModal) {
+      existingModal.style.display = 'flex';
+      var uInput = existingModal.querySelector('#yaktube-admin-username');
+      if (uInput) uInput.focus();
+      return;
+    }
+
+    var modal = document.createElement('div');
+    modal.id = 'yaktube-admin-login-modal';
+    modal.className = 'yaktube-modal-overlay';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'yaktube-admin-modal-title');
+
+    modal.innerHTML =
+      '<div class="yaktube-modal-card" style="max-width: 420px; background:#181824; border:1px solid rgba(255,143,55,0.4); border-radius:18px; padding:26px; color:#fff; box-shadow:0 16px 40px rgba(0,0,0,0.8); text-align:left;">' +
+      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">' +
+      '<h3 id="yaktube-admin-modal-title" style="margin:0; font-size:18px; color:#ff8f37;">⚙️ Sunucu Yöneticisi Girişi</h3>' +
+      '<button id="yaktube-admin-modal-close" class="yaktube-voice-modal-close-btn" aria-label="Kapat">✕</button>' +
+      '</div>' +
+      '<p style="font-size:13px; color:#aaa; margin-bottom:16px;">Yerel yönetici (admin) kullanıcı adı ve şifrenizle giriş yaparak PeerTube yönetim paneline erişebilirsiniz.</p>' +
+      '<form id="yaktube-admin-direct-form" style="display:flex; flex-direction:column; gap:12px;">' +
+      '<div style="display:flex; flex-direction:column; gap:4px;">' +
+      '<label for="yaktube-admin-username" style="font-size:13px; font-weight:600; color:#ddd;">Kullanıcı Adı veya E-posta:</label>' +
+      '<input type="text" id="yaktube-admin-username" required style="background:#22222e; border:1px solid #444; border-radius:8px; padding:10px 12px; color:#fff; font-size:14px; outline:none;" />' +
+      '</div>' +
+      '<div style="display:flex; flex-direction:column; gap:4px;">' +
+      '<label for="yaktube-admin-password" style="font-size:13px; font-weight:600; color:#ddd;">Şifre:</label>' +
+      '<input type="password" id="yaktube-admin-password" required style="background:#22222e; border:1px solid #444; border-radius:8px; padding:10px 12px; color:#fff; font-size:14px; outline:none;" />' +
+      '</div>' +
+      '<div id="yaktube-admin-login-error" style="color:#ef4444; font-size:13px; display:none; margin-top:4px;"></div>' +
+      '<button type="submit" id="yaktube-admin-login-submit" style="background:linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); color:#fff; border:none; border-radius:8px; padding:12px; font-weight:700; font-size:14px; cursor:pointer; margin-top:6px;">Yönetici Olarak Giriş Yap</button>' +
+      '</form>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#yaktube-admin-modal-close').addEventListener('click', function () {
+      modal.style.display = 'none';
+    });
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+
+    var form = modal.querySelector('#yaktube-admin-direct-form');
+    var errEl = modal.querySelector('#yaktube-admin-login-error');
+    var uInput = modal.querySelector('#yaktube-admin-username');
+    var pInput = modal.querySelector('#yaktube-admin-password');
+    var sBtn = modal.querySelector('#yaktube-admin-login-submit');
+
+    uInput.focus();
+
+    form.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      errEl.style.display = 'none';
+      sBtn.disabled = true;
+      sBtn.innerText = 'Giriş Yapılıyor...';
+
+      try {
+        var clientRes = await fetch('/api/v1/oauth-clients/local');
+        var clientData = await clientRes.json();
+
+        var bodyParams = new URLSearchParams({
+          client_id: clientData.client_id,
+          client_secret: clientData.client_secret,
+          grant_type: 'password',
+          username: uInput.value.trim(),
+          password: pInput.value
+        });
+
+        var tokenRes = await fetch('/api/v1/users/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: bodyParams.toString()
+        });
+
+        var tokenData = await tokenRes.json();
+        if (!tokenRes.ok || !tokenData.access_token) {
+          throw new Error(tokenData.error_description || tokenData.error || 'Kullanıcı adı veya şifre hatalı.');
+        }
+
+        // Store tokens
+        localStorage.setItem('access_token', tokenData.access_token);
+        localStorage.setItem('refresh_token', tokenData.refresh_token);
+        localStorage.setItem('token_type', tokenData.token_type || 'Bearer');
+        localStorage.setItem('username', uInput.value.trim());
+
+        // Get user details
+        var meRes = await fetch('/api/v1/users/me', {
+          headers: { Authorization: 'Bearer ' + tokenData.access_token }
+        });
+        if (meRes.ok) {
+          var meData = await meRes.json();
+          localStorage.setItem('email', meData.email || '');
+          localStorage.setItem('displayName', meData.displayName || meData.username || '');
+        }
+
+        announce('Yönetici girişi başarılı! Yönetim paneline yönlendiriliyorsunuz.', true);
+        window.location.href = '/admin';
+      } catch (err) {
+        errEl.innerText = err.message;
+        errEl.style.display = 'block';
+        sBtn.disabled = false;
+        sBtn.innerText = 'Yönetici Olarak Giriş Yap';
+      }
+    });
+  }
+
   // 2. YakNet SSO Header & Login Flow
   function injectYakNetSSO() {
     // 2.1 Header: Place YakNet Account widget in top-right .buttons-container
@@ -326,11 +437,7 @@
         if (showAdminBtn) {
           showAdminBtn.addEventListener('click', function (e) {
             e.preventDefault();
-            subElements.forEach(function (el) {
-              el.style.display = '';
-            });
-            showAdminBtn.style.display = 'none';
-            announce('Yönetici kullanıcı adı ve şifre giriş formu açıldı.');
+            openLocalAdminLoginModal();
           });
         }
       }
@@ -340,6 +447,20 @@
   // 3. Intelligent Branding & A11y DOM Auto-Fixer
   function autoFixDOM() {
     injectAccessiblePlayerBar();
+
+    // Check if on 403 / unauthorized page and provide admin login button
+    var notAuthorizedEl = document.querySelector('my-not-found, .not-found, .forbidden, my-forbidden, .error-page');
+    if (notAuthorizedEl && !document.getElementById('yaktube-403-admin-btn')) {
+      var btn403 = document.createElement('div');
+      btn403.id = 'yaktube-403-admin-btn';
+      btn403.style.margin = '20px auto';
+      btn403.style.textAlign = 'center';
+      btn403.innerHTML =
+        '<button style="background:linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); color:#fff; border:none; padding:12px 24px; border-radius:10px; font-weight:700; cursor:pointer; font-size:15px;">🔑 Sunucu Yöneticisi Olarak Giriş Yap (Alt+A)</button>';
+      btn403.querySelector('button').addEventListener('click', openLocalAdminLoginModal);
+      notAuthorizedEl.appendChild(btn403);
+    }
+
     injectYakNetSSO();
 
     // Aggressively remove generic Framasoft Open-in-App / Play Store banners
@@ -849,6 +970,13 @@
       if (isInputFocused()) {
         document.activeElement.blur();
       }
+      return;
+    }
+
+    // Admin Login: Alt+A
+    if (e.altKey && (e.key === 'a' || e.key === 'A') && !isInputFocused()) {
+      e.preventDefault();
+      openLocalAdminLoginModal();
       return;
     }
 
