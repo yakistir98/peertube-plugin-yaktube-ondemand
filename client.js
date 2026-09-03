@@ -1926,7 +1926,27 @@ try {
     var activeVoiceRec = null;
     var isVoiceListening = false;
 
-    // Dynamic Search History & Trending Helpers
+    // Dynamic Search History & Trending Helpers with YakNet Cloud Sync
+    function isUserLoggedIn() {
+      try {
+        var token = localStorage.getItem('access_token');
+        var username = localStorage.getItem('username');
+        return Boolean(token || username);
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function isAccountSyncEnabled() {
+      try {
+        var userPref = localStorage.getItem('yaktube_sync_search_history');
+        if (userPref === 'false') return false;
+        return isUserLoggedIn();
+      } catch (e) {
+        return false;
+      }
+    }
+
     function getRecentSearches() {
       try {
         var data = localStorage.getItem('yaktube_recent_searches');
@@ -1943,6 +1963,33 @@ try {
       return defaults;
     }
 
+    var isSyncingHistory = false;
+    function syncCloudSearchHistory(callback) {
+      if (!isAccountSyncEnabled() || isSyncingHistory) return;
+      isSyncingHistory = true;
+
+      var token = localStorage.getItem('access_token');
+      var headers = {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+
+      fetch('/api-custom/search-history', {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include'
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          isSyncingHistory = false;
+          if (data && data.status === 'success' && Array.isArray(data.history) && data.history.length > 0) {
+            localStorage.setItem('yaktube_recent_searches', JSON.stringify(data.history));
+            if (typeof callback === 'function') callback();
+          }
+        })
+        .catch(function () {
+          isSyncingHistory = false;
+        });
+    }
+
     function saveRecentSearch(query) {
       if (!query || query.trim().length < 2) return;
       var q = query.trim();
@@ -1952,15 +1999,42 @@ try {
           return item.toLowerCase() !== q.toLowerCase();
         });
         list.unshift(q);
-        if (list.length > 8) list = list.slice(0, 8);
+        if (list.length > 12) list = list.slice(0, 12);
         localStorage.setItem('yaktube_recent_searches', JSON.stringify(list));
       } catch (e) {}
+
+      // If user is logged in and sync is active, sync with YakNet account
+      if (isAccountSyncEnabled()) {
+        var token = localStorage.getItem('access_token');
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        fetch('/api-custom/search-history', {
+          method: 'POST',
+          headers: headers,
+          credentials: 'include',
+          body: JSON.stringify({ query: q })
+        }).catch(function () {});
+      }
     }
 
     function clearRecentSearches() {
       try {
         localStorage.removeItem('yaktube_recent_searches');
       } catch (e) {}
+
+      if (isAccountSyncEnabled()) {
+        var token = localStorage.getItem('access_token');
+        var headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        fetch('/api-custom/search-history', {
+          method: 'DELETE',
+          headers: headers,
+          credentials: 'include'
+        }).catch(function () {});
+      }
+
       renderDynamicSearchChips();
       announce('Arama geçmişi temizlendi.');
     }
@@ -1998,17 +2072,49 @@ try {
       if (!container) return;
 
       var recent = getRecentSearches();
+      var loggedIn = isUserLoggedIn();
+      var syncEnabled = isAccountSyncEnabled();
       var html = '';
 
-      // 1. Recent searches section (if any)
+      // 1. Recent searches section
+      html +=
+        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">' +
+        '<div class="yaktube-modal-section-title" style="margin-bottom: 0;">🕒 Son Aramalarınız</div>' +
+        '<div style="display: flex; align-items: center; gap: 8px;">';
+
+      if (loggedIn) {
+        var syncTitle = syncEnabled
+          ? 'YakNet Bulut Eşitlemesi Aktif (Tüm cihazlarınızda senkronize edilir. Kapatmak için tıklayın.)'
+          : 'Eşitleme Kapalı (Aramalar sadece bu cihazda saklanır. Açmak için tıklayın.)';
+        var syncText = syncEnabled ? '☁️ Eşitleme: Açık' : '☁️ Eşitleme: Kapalı';
+        var syncBg = syncEnabled ? '#0f766e' : '#334155';
+        var syncColor = syncEnabled ? '#5eead4' : '#94a3b8';
+        html +=
+          '<button id="yaktube-sync-toggle-btn" style="background: ' +
+          syncBg +
+          '; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 2px 8px; color: ' +
+          syncColor +
+          '; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;" title="' +
+          syncTitle +
+          '" aria-label="' +
+          syncTitle +
+          '">' +
+          syncText +
+          '</button>';
+      } else {
+        html +=
+          '<span style="font-size: 11px; color: #94a3b8; background: #1e293b; border-radius: 6px; padding: 2px 8px;" title="Misafir modundasınız, aramalar sadece bu cihazda saklanır">🔒 Bu Cihazda</span>';
+      }
+
       if (recent.length > 0) {
         html +=
-          '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">' +
-          '<div class="yaktube-modal-section-title" style="margin-bottom: 0;">🕒 Son Aramalarınız</div>' +
-          '<button id="yaktube-clear-recent-btn" style="background: transparent; border: none; color: #ff8f37; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline;" aria-label="Arama geçmişini temizle">Geçmişi Temizle</button>' +
-          '</div>' +
-          '<div class="yaktube-modal-chips-grid" style="margin-bottom: 18px;">';
+          '<button id="yaktube-clear-recent-btn" style="background: transparent; border: none; color: #ff8f37; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline;" aria-label="Arama geçmişini temizle">Geçmişi Temizle</button>';
+      }
 
+      html += '</div></div>';
+
+      if (recent.length > 0) {
+        html += '<div class="yaktube-modal-chips-grid" style="margin-bottom: 18px;">';
         recent.forEach(function (term) {
           var safeTerm = term.replace(/"/g, '&quot;');
           html +=
@@ -2061,6 +2167,24 @@ try {
           e.preventDefault();
           e.stopPropagation();
           clearRecentSearches();
+        });
+      }
+
+      var syncToggleBtn = container.querySelector('#yaktube-sync-toggle-btn');
+      if (syncToggleBtn) {
+        syncToggleBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var current = localStorage.getItem('yaktube_sync_search_history') !== 'false';
+          var next = !current;
+          localStorage.setItem('yaktube_sync_search_history', next ? 'true' : 'false');
+          if (next) {
+            announce('YakNet arama geçmişi eşitlemesi açıldı.');
+            syncCloudSearchHistory(renderDynamicSearchChips);
+          } else {
+            announce('Arama geçmişi eşitlemesi kapatıldı. Aramalar sadece bu cihazda saklanacak.');
+          }
+          renderDynamicSearchChips();
         });
       }
     }
@@ -2191,6 +2315,7 @@ try {
       modal.classList.add('yaktube-modal-open');
       modal.style.display = 'flex';
       renderDynamicSearchChips();
+      syncCloudSearchHistory(renderDynamicSearchChips);
 
       var inp = modal.querySelector('#yaktube-modal-input');
       var clearBtn = modal.querySelector('#yaktube-modal-clear-btn');
