@@ -942,3 +942,18 @@ body.yaktube-theater-mode .video-js {
   color: #fff !important;
   outline: none !important;
 }
+
+
+/* Suppress 404 Mascot and Error Page on Search results */
+body:has(#yaktube-ondemand-container) my-error-page,
+#yaktube-ondemand-container ~ my-error-page,
+my-error-page:has(~ #yaktube-ondemand-container),
+my-error-page {
+  /* Only hide if search param is active */
+}
+body:has(#yaktube-ondemand-container) my-error-page {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}

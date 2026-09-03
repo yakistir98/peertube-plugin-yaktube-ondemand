@@ -1,3 +1,11 @@
+
+  // Immediate URL rewrite: redirect legacy /search/videos to /search
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {
+      var targetSearch = window.location.search || '';
+      window.location.replace('/search' + targetSearch);
+    }
+  }
 try {
   (function () {
     if (window.__YAKTUBE_ENGINE_LOADED__) return;
@@ -1626,6 +1634,18 @@ try {
     }
 
     function checkAndInjectSearchResults() {
+      // Clean up stray 404 error mascot pages if on search
+      try {
+        var errPages = document.querySelectorAll('my-error-page');
+        errPages.forEach(function(ep) { ep.remove(); });
+      } catch (e) {}
+
+    // Instant URL fixer: redirect legacy /search/videos to native /search
+    if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {
+      window.location.replace('/search' + window.location.search);
+      return;
+    }
+
       var url = new URL(window.location.href);
       var searchParam = url.searchParams.get('search');
 
@@ -2126,7 +2146,7 @@ try {
           saveRecentSearch(q);
           announce('"' + q + '" için arama yapılıyor...', true);
           closeFullSearchModal();
-          window.location.href = '/search/videos?search=' + encodeURIComponent(q);
+          window.location.href = '/search?search=' + encodeURIComponent(q);
         }
       }
       window.__yaktube_execute_search__ = executeSearch;
@@ -2257,7 +2277,7 @@ try {
               announce('"' + transcript + '" için arama başlatılıyor...', true);
               setTimeout(function () {
                 closeFullSearchModal();
-                window.location.href = '/search/videos?search=' + encodeURIComponent(transcript);
+                window.location.href = '/search?search=' + encodeURIComponent(transcript);
               }, 500);
             }
           }
