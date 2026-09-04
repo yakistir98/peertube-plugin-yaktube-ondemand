@@ -365,18 +365,24 @@ try {
       var uEmail = localStorage.getItem('email');
       var displayName = localStorage.getItem('displayName') || uName || '';
       var emailStr = uEmail || '';
-      var isAuth = !!token && !!uName;
+      var isAuth =
+        (!!token && !!uName) ||
+        (liveWidget && liveWidget.querySelector('yaknet-account[authenticated="true"]')) ||
+        !!document.querySelector('yaknet-account[authenticated="true"]');
 
       if (headerRight) {
-        var defaultLoginLink = headerRight.querySelector('my-login-link, a[href*="/login"], .login-button');
         var liveWidget = headerRight.querySelector('#yaknet-header-account-widget');
 
         if (isAuth) {
-          // 1. AUTHENTICATED: Hide native login link, Show YakNet Account Profile Menu
-          if (defaultLoginLink) {
-            defaultLoginLink.style.display = 'none';
-            defaultLoginLink.setAttribute('aria-hidden', 'true');
-          }
+          // 1. AUTHENTICATED: Add class to body & Hide ALL native login links completely
+          document.body.classList.add('yaktube-user-logged-in');
+          document
+            .querySelectorAll('my-login-link, a[href*="/login"], .login-button, [class*="login-link"]')
+            .forEach(function (btn) {
+              btn.style.setProperty('display', 'none', 'important');
+              btn.setAttribute('aria-hidden', 'true');
+              btn.setAttribute('tabindex', '-1');
+            });
 
           if (!liveWidget) {
             var widgetWrap = document.createElement('div');
@@ -449,29 +455,30 @@ try {
           }
         } else {
           // 2. GUEST / NOT LOGGED IN:
-          // A. Physically remove any <yaknet-account> widget from DOM to guarantee zero shadow DOM duplicate buttons
+          document.body.classList.remove('yaktube-user-logged-in');
           if (liveWidget) {
             liveWidget.remove();
           }
 
-          // B. Ensure PeerTube's native login link is the ONLY single accessible login element
-          if (defaultLoginLink) {
-            defaultLoginLink.style.display = '';
-            defaultLoginLink.removeAttribute('aria-hidden');
+          document
+            .querySelectorAll('my-login-link, a[href*="/login"], .login-button, [class*="login-link"]')
+            .forEach(function (btn) {
+              btn.style.display = '';
+              btn.removeAttribute('aria-hidden');
+              btn.removeAttribute('tabindex');
 
-            var loginAnchor =
-              defaultLoginLink.tagName.toLowerCase() === 'a' ? defaultLoginLink : defaultLoginLink.querySelector('a');
-            if (loginAnchor) {
-              loginAnchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
-              loginAnchor.setAttribute('title', 'YakNet ile Giriş Yap');
-              var spanText = loginAnchor.querySelector('span');
-              if (spanText) {
-                spanText.textContent = 'YakNet ile Giriş Yap';
-              } else {
-                loginAnchor.textContent = 'YakNet ile Giriş Yap';
+              var loginAnchor = btn.tagName.toLowerCase() === 'a' ? btn : btn.querySelector('a');
+              if (loginAnchor) {
+                loginAnchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+                loginAnchor.setAttribute('title', 'YakNet ile Giriş Yap');
+                var spanText = loginAnchor.querySelector('span');
+                if (spanText) {
+                  spanText.textContent = 'YakNet ile Giriş Yap';
+                } else {
+                  loginAnchor.textContent = 'YakNet ile Giriş Yap';
+                }
               }
-            }
-          }
+            });
         }
       }
 
@@ -571,34 +578,55 @@ try {
 
       injectYakNetSSO();
 
-      // Replace all login buttons labels and titles
-      document
-        .querySelectorAll(
-          'my-login-link, a[href*="/login"], a[title*="Giriş sayfasına git"], [aria-label*="Giriş sayfasına git"]'
-        )
-        .forEach(function (el) {
-          if (el.getAttribute('title') && el.getAttribute('title').includes('Giriş sayfasına git')) {
-            el.setAttribute('title', 'YakNet ile Giriş Yap');
-          }
-          if (el.getAttribute('aria-label') && el.getAttribute('aria-label').includes('Giriş sayfasına git')) {
-            el.setAttribute('aria-label', 'YakNet ile Giriş Yap');
-          }
-          var anchor = el.tagName.toLowerCase() === 'a' ? el : el.querySelector('a');
-          if (anchor) {
-            anchor.setAttribute('title', 'YakNet ile Giriş Yap');
-            anchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
-            var spans = anchor.querySelectorAll('span');
-            spans.forEach(function (s) {
-              if (
-                s.textContent.includes('Giriş sayfasına git') ||
-                s.textContent.trim() === 'Giriş' ||
-                s.textContent.trim() === 'Giriş yap'
-              ) {
-                s.textContent = 'YakNet ile Giriş Yap';
-              }
-            });
-          }
-        });
+      // Check auth status for login button rendering
+      var tokenVal = localStorage.getItem('access_token');
+      var userVal = localStorage.getItem('username');
+      var isAlreadyAuth =
+        (!!tokenVal && !!userVal) ||
+        document.body.classList.contains('yaktube-user-logged-in') ||
+        !!document.querySelector('yaknet-account[authenticated="true"]');
+
+      if (!isAlreadyAuth) {
+        // Replace all login buttons labels and titles ONLY for guests
+        document
+          .querySelectorAll(
+            'my-login-link, a[href*="/login"], a[title*="Giriş sayfasına git"], [aria-label*="Giriş sayfasına git"]'
+          )
+          .forEach(function (el) {
+            if (el.getAttribute('title') && el.getAttribute('title').includes('Giriş sayfasına git')) {
+              el.setAttribute('title', 'YakNet ile Giriş Yap');
+            }
+            if (el.getAttribute('aria-label') && el.getAttribute('aria-label').includes('Giriş sayfasına git')) {
+              el.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+            }
+            var anchor = el.tagName.toLowerCase() === 'a' ? el : el.querySelector('a');
+            if (anchor) {
+              anchor.setAttribute('title', 'YakNet ile Giriş Yap');
+              anchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
+              var spans = anchor.querySelectorAll('span');
+              spans.forEach(function (s) {
+                if (
+                  s.textContent.includes('Giriş sayfasına git') ||
+                  s.textContent.trim() === 'Giriş' ||
+                  s.textContent.trim() === 'Giriş yap'
+                ) {
+                  s.textContent = 'YakNet ile Giriş Yap';
+                }
+              });
+            }
+          });
+      } else {
+        // Guarantee all login links are hidden when user is logged in
+        document
+          .querySelectorAll(
+            'my-login-link, a[href*="/login"], .login-button, [class*="login-link"]'
+          )
+          .forEach(function (el) {
+            el.style.setProperty('display', 'none', 'important');
+            el.setAttribute('aria-hidden', 'true');
+            el.setAttribute('tabindex', '-1');
+          });
+      }
 
       // Aggressively remove generic Framasoft Open-in-App / Play Store banners
       document
