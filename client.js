@@ -2025,10 +2025,12 @@ try {
     function callCloudSearchHistory(method, queryParams, body, onSuccess, onError) {
       var token = localStorage.getItem('access_token');
       var email = localStorage.getItem('email');
+      var username = localStorage.getItem('username');
       var headers = {};
       if (body) headers['Content-Type'] = 'application/json';
       if (token) headers['Authorization'] = 'Bearer ' + token;
       if (email) headers['X-User-Email'] = email;
+      if (username) headers['X-User-Username'] = username;
 
       var authUrl = 'https://auth.yakhub.com.tr/api/yaktube/search-history' + (queryParams || '');
       var bridgeUrl = '/api-custom/search-history' + (queryParams || '');
