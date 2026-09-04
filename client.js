@@ -1,26 +1,37 @@
 
   // 100% Incompatible Browser Suppression & Error Guardian
+  // CRITICAL: PeerTube's Angular app (my-app ngOnInit) relies on document.getElementById('incompatible-browser')
+  // to exist so it can do .className += " browser-ok" before calling this.loadUser()!
+  // Removing it from DOM causes a null pointer crash that breaks user session initialization!
   if (typeof window !== 'undefined') {
     try {
       window.displayIncompatibleBrowser = function () {};
       var neuterIncompatible = function () {
         var el = document.getElementById('incompatible-browser');
         if (el) {
-          el.classList.add('browser-ok');
+          if (!el.classList.contains('browser-ok')) {
+            el.classList.add('browser-ok');
+          }
           el.style.setProperty('display', 'none', 'important');
-          if (el.parentNode) el.parentNode.removeChild(el);
+          el.style.setProperty('visibility', 'hidden', 'important');
+          el.style.setProperty('height', '0px', 'important');
+          el.style.setProperty('width', '0px', 'important');
+          el.style.setProperty('opacity', '0', 'important');
+          el.style.setProperty('pointer-events', 'none', 'important');
+        } else {
+          try {
+            var dummy = document.createElement('div');
+            dummy.id = 'incompatible-browser';
+            dummy.className = 'browser-ok';
+            dummy.style.display = 'none';
+            (document.body || document.documentElement).appendChild(dummy);
+          } catch (e) {}
         }
       };
       neuterIncompatible();
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', neuterIncompatible);
       }
-      try {
-        var incompObserver = new MutationObserver(function () {
-          neuterIncompatible();
-        });
-        incompObserver.observe(document.documentElement || document.body, { childList: true, subtree: true });
-      } catch (e) {}
       setInterval(neuterIncompatible, 1000);
     } catch (e) {}
   }
@@ -365,10 +376,7 @@ try {
       var uEmail = localStorage.getItem('email');
       var displayName = localStorage.getItem('displayName') || uName || '';
       var emailStr = uEmail || '';
-      var isAuth =
-        (!!token && !!uName) ||
-        (liveWidget && liveWidget.querySelector('yaknet-account[authenticated="true"]')) ||
-        !!document.querySelector('yaknet-account[authenticated="true"]');
+      var isAuth = !!token && !!uName;
 
       if (headerRight) {
         var liveWidget = headerRight.querySelector('#yaknet-header-account-widget');
@@ -581,10 +589,7 @@ try {
       // Check auth status for login button rendering
       var tokenVal = localStorage.getItem('access_token');
       var userVal = localStorage.getItem('username');
-      var isAlreadyAuth =
-        (!!tokenVal && !!userVal) ||
-        document.body.classList.contains('yaktube-user-logged-in') ||
-        !!document.querySelector('yaknet-account[authenticated="true"]');
+      var isAlreadyAuth = !!tokenVal && !!userVal;
 
       if (!isAlreadyAuth) {
         // Replace all login buttons labels and titles ONLY for guests
@@ -614,17 +619,6 @@ try {
                 }
               });
             }
-          });
-      } else {
-        // Guarantee all login links are hidden when user is logged in
-        document
-          .querySelectorAll(
-            'my-login-link, a[href*="/login"], .login-button, [class*="login-link"]'
-          )
-          .forEach(function (el) {
-            el.style.setProperty('display', 'none', 'important');
-            el.setAttribute('aria-hidden', 'true');
-            el.setAttribute('tabindex', '-1');
           });
       }
 

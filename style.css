@@ -24,27 +24,6 @@ button[title*='Dismiss'],
   clip: rect(0, 0, 0, 0) !important;
 }
 
-/* Permanent suppression of native login links when user is authenticated */
-body.yaktube-user-logged-in my-login-link,
-body.yaktube-user-logged-in a[href*="/login"],
-body.yaktube-user-logged-in .login-button,
-body.yaktube-user-logged-in [class*="login-link"],
-body.yaktube-user-logged-in .peertube-button-link[href*="/login"],
-body.yaktube-user-logged-in a[title*="Giriş"],
-body.yaktube-user-logged-in a[aria-label*="Giriş"] {
-  display: none !important;
-  visibility: hidden !important;
-  height: 0 !important;
-  width: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  pointer-events: none !important;
-  opacity: 0 !important;
-  position: absolute !important;
-  z-index: -99999 !important;
-  clip: rect(0, 0, 0, 0) !important;
-}
-
 /* Permanent Aggressive Suppression of Generic JoinPeerTube / Framasoft Open-in-App Banners */
 my-open-app,
 my-open-in-app,
