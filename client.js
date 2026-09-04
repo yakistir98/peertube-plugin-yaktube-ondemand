@@ -172,10 +172,7 @@ try {
           var hasToken = localStorage.getItem('access_token') || localStorage.getItem('username');
           if (hasToken) {
             console.log('[YakTube] YakNet session ended elsewhere. Clearing YakTube...');
-            try {
-              localStorage.clear();
-              sessionStorage.clear();
-            } catch (e) {}
+            clearYakTubeAuthSession();
             window.location.reload();
           }
         }
@@ -198,20 +195,32 @@ try {
       } else if (e.detail && e.detail.authenticated === false) {
         var hasToken = localStorage.getItem('access_token') || localStorage.getItem('username');
         if (hasToken) {
-          try {
-            localStorage.clear();
-            sessionStorage.clear();
-          } catch (err) {}
+          clearYakTubeAuthSession();
           window.location.reload();
         }
       }
     });
 
+    // Clear YakTube auth session and cloud search cache safely
+    function clearYakTubeAuthSession() {
+      try {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('token_type');
+        localStorage.removeItem('id');
+        localStorage.removeItem('username');
+        localStorage.removeItem('displayName');
+        localStorage.removeItem('email');
+        localStorage.removeItem('role');
+        localStorage.removeItem('yaktube_recent_searches');
+        sessionStorage.clear();
+      } catch (e) {}
+    }
+
     // Unified single sign-out for YakTube and YakNet
     function performUnifiedLogout() {
+      clearYakTubeAuthSession();
       try {
-        localStorage.clear();
-        sessionStorage.clear();
         sessionStorage.setItem('yaknet_manual_logout', 'true');
       } catch (err) {}
       window.location.replace(
@@ -2005,10 +2014,51 @@ try {
       } catch (e) {}
       // Default initial recent searches for first-time visitors
       var defaults = ['Tarkan', 'Barış Manço', 'Yapay Zeka', 'Canlı Haber'];
-      try {
-        localStorage.setItem('yaktube_recent_searches', JSON.stringify(defaults));
-      } catch (e) {}
+      if (!isUserLoggedIn()) {
+        try {
+          localStorage.setItem('yaktube_recent_searches', JSON.stringify(defaults));
+        } catch (e) {}
+      }
       return defaults;
+    }
+
+    function callCloudSearchHistory(method, queryParams, body, onSuccess, onError) {
+      var token = localStorage.getItem('access_token');
+      var email = localStorage.getItem('email');
+      var headers = {};
+      if (body) headers['Content-Type'] = 'application/json';
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      if (email) headers['X-User-Email'] = email;
+
+      var authUrl = 'https://auth.yakhub.com.tr/api/yaktube/search-history' + (queryParams || '');
+      var bridgeUrl = '/api-custom/search-history' + (queryParams || '');
+
+      var options = {
+        method: method,
+        headers: headers,
+        credentials: 'include'
+      };
+      if (body) options.body = JSON.stringify(body);
+
+      fetch(authUrl, options)
+        .then(function (res) {
+          if (!res.ok) throw new Error('Auth server status ' + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          if (typeof onSuccess === 'function') onSuccess(data);
+        })
+        .catch(function () {
+          // Fallback to local PeerTube bridge proxy
+          fetch(bridgeUrl, options)
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+              if (typeof onSuccess === 'function') onSuccess(data);
+            })
+            .catch(function (e) {
+              if (typeof onError === 'function') onError(e);
+            });
+        });
     }
 
     var isSyncingHistory = false;
@@ -2016,26 +2066,17 @@ try {
       if (!isAccountSyncEnabled() || isSyncingHistory) return;
       isSyncingHistory = true;
 
-      var token = localStorage.getItem('access_token');
-      var headers = {};
-      if (token) headers['Authorization'] = 'Bearer ' + token;
-
-      fetch('/api-custom/search-history', {
-        method: 'GET',
-        headers: headers,
-        credentials: 'include'
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          isSyncingHistory = false;
-          if (data && data.status === 'success' && Array.isArray(data.history) && data.history.length > 0) {
+      callCloudSearchHistory('GET', '', null, function (data) {
+        isSyncingHistory = false;
+        if (data && data.status === 'success' && Array.isArray(data.history)) {
+          if (data.history.length > 0) {
             localStorage.setItem('yaktube_recent_searches', JSON.stringify(data.history));
-            if (typeof callback === 'function') callback();
           }
-        })
-        .catch(function () {
-          isSyncingHistory = false;
-        });
+          if (typeof callback === 'function') callback();
+        }
+      }, function () {
+        isSyncingHistory = false;
+      });
     }
 
     function saveRecentSearch(query) {
@@ -2053,16 +2094,7 @@ try {
 
       // If user is logged in and sync is active, sync with YakNet account
       if (isAccountSyncEnabled()) {
-        var token = localStorage.getItem('access_token');
-        var headers = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = 'Bearer ' + token;
-
-        fetch('/api-custom/search-history', {
-          method: 'POST',
-          headers: headers,
-          credentials: 'include',
-          body: JSON.stringify({ query: q })
-        }).catch(function () {});
+        callCloudSearchHistory('POST', '', { query: q, device_name: 'YakTube Web' });
       }
     }
 
@@ -2072,15 +2104,7 @@ try {
       } catch (e) {}
 
       if (isAccountSyncEnabled()) {
-        var token = localStorage.getItem('access_token');
-        var headers = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = 'Bearer ' + token;
-
-        fetch('/api-custom/search-history', {
-          method: 'DELETE',
-          headers: headers,
-          credentials: 'include'
-        }).catch(function () {});
+        callCloudSearchHistory('DELETE', '', null);
       }
 
       renderDynamicSearchChips();
@@ -2610,6 +2634,13 @@ try {
         openFullSearchModal('', false);
       }
     });
+
+    // Automatically trigger cloud search history pull on startup if logged in
+    try {
+      if (isAccountSyncEnabled()) {
+        syncCloudSearchHistory();
+      }
+    } catch (e) {}
 
     // 7.5. Reactive Hybrid Related Videos Engine (Watch Page)
     var currentActiveVideoKey = null;
