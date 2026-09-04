@@ -1,48 +1,47 @@
-
-  // 100% Incompatible Browser Suppression & Error Guardian
-  // CRITICAL: PeerTube's Angular app (my-app ngOnInit) relies on document.getElementById('incompatible-browser')
-  // to exist so it can do .className += " browser-ok" before calling this.loadUser()!
-  // Removing it from DOM causes a null pointer crash that breaks user session initialization!
-  if (typeof window !== 'undefined') {
-    try {
-      window.displayIncompatibleBrowser = function () {};
-      var neuterIncompatible = function () {
-        var el = document.getElementById('incompatible-browser');
-        if (el) {
-          if (!el.classList.contains('browser-ok')) {
-            el.classList.add('browser-ok');
-          }
-          el.style.setProperty('display', 'none', 'important');
-          el.style.setProperty('visibility', 'hidden', 'important');
-          el.style.setProperty('height', '0px', 'important');
-          el.style.setProperty('width', '0px', 'important');
-          el.style.setProperty('opacity', '0', 'important');
-          el.style.setProperty('pointer-events', 'none', 'important');
-        } else {
-          try {
-            var dummy = document.createElement('div');
-            dummy.id = 'incompatible-browser';
-            dummy.className = 'browser-ok';
-            dummy.style.display = 'none';
-            (document.body || document.documentElement).appendChild(dummy);
-          } catch (e) {}
+// 100% Incompatible Browser Suppression & Error Guardian
+// CRITICAL: PeerTube's Angular app (my-app ngOnInit) relies on document.getElementById('incompatible-browser')
+// to exist so it can do .className += " browser-ok" before calling this.loadUser()!
+// Removing it from DOM causes a null pointer crash that breaks user session initialization!
+if (typeof window !== 'undefined') {
+  try {
+    window.displayIncompatibleBrowser = function () {};
+    var neuterIncompatible = function () {
+      var el = document.getElementById('incompatible-browser');
+      if (el) {
+        if (!el.classList.contains('browser-ok')) {
+          el.classList.add('browser-ok');
         }
-      };
-      neuterIncompatible();
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', neuterIncompatible);
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('height', '0px', 'important');
+        el.style.setProperty('width', '0px', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+      } else {
+        try {
+          var dummy = document.createElement('div');
+          dummy.id = 'incompatible-browser';
+          dummy.className = 'browser-ok';
+          dummy.style.display = 'none';
+          (document.body || document.documentElement).appendChild(dummy);
+        } catch (e) {}
       }
-      setInterval(neuterIncompatible, 1000);
-    } catch (e) {}
-  }
-
-  // Immediate URL rewrite: redirect legacy /search/videos to /search
-  if (typeof window !== 'undefined' && window.location) {
-    if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {
-      var targetSearch = window.location.search || '';
-      window.location.replace('/search' + targetSearch);
+    };
+    neuterIncompatible();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', neuterIncompatible);
     }
+    setInterval(neuterIncompatible, 1000);
+  } catch (e) {}
+}
+
+// Immediate URL rewrite: redirect legacy /search/videos to /search
+if (typeof window !== 'undefined' && window.location) {
+  if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {
+    var targetSearch = window.location.search || '';
+    window.location.replace('/search' + targetSearch);
   }
+}
 try {
   (function () {
     if (window.__YAKTUBE_ENGINE_LOADED__) return;
@@ -1694,14 +1693,16 @@ try {
       // Clean up stray 404 error mascot pages if on search
       try {
         var errPages = document.querySelectorAll('my-error-page');
-        errPages.forEach(function(ep) { ep.remove(); });
+        errPages.forEach(function (ep) {
+          ep.remove();
+        });
       } catch (e) {}
 
-    // Instant URL fixer: redirect legacy /search/videos to native /search
-    if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {
-      window.location.replace('/search' + window.location.search);
-      return;
-    }
+      // Instant URL fixer: redirect legacy /search/videos to native /search
+      if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {
+        window.location.replace('/search' + window.location.search);
+        return;
+      }
 
       var url = new URL(window.location.href);
       var searchParam = url.searchParams.get('search');
@@ -2053,7 +2054,9 @@ try {
         .catch(function () {
           // Fallback to local PeerTube bridge proxy
           fetch(bridgeUrl, options)
-            .then(function (res) { return res.json(); })
+            .then(function (res) {
+              return res.json();
+            })
             .then(function (data) {
               if (typeof onSuccess === 'function') onSuccess(data);
             })
@@ -2068,17 +2071,23 @@ try {
       if (!isAccountSyncEnabled() || isSyncingHistory) return;
       isSyncingHistory = true;
 
-      callCloudSearchHistory('GET', '', null, function (data) {
-        isSyncingHistory = false;
-        if (data && data.status === 'success' && Array.isArray(data.history)) {
-          if (data.history.length > 0) {
-            localStorage.setItem('yaktube_recent_searches', JSON.stringify(data.history));
+      callCloudSearchHistory(
+        'GET',
+        '',
+        null,
+        function (data) {
+          isSyncingHistory = false;
+          if (data && data.status === 'success' && Array.isArray(data.history)) {
+            if (data.history.length > 0) {
+              localStorage.setItem('yaktube_recent_searches', JSON.stringify(data.history));
+            }
+            if (typeof callback === 'function') callback();
           }
-          if (typeof callback === 'function') callback();
+        },
+        function () {
+          isSyncingHistory = false;
         }
-      }, function () {
-        isSyncingHistory = false;
-      });
+      );
     }
 
     function saveRecentSearch(query) {

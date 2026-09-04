@@ -1,7 +1,7 @@
 /* 100% Elimination of PeerTube Mobile Open-in-App & Incompatible Browser Banners */
 #incompatible-browser,
 .alert-light#incompatible-browser,
-div[id="incompatible-browser"],
+div[id='incompatible-browser'],
 .incompatible-browser,
 .mobile-msg,
 my-header .mobile-msg,
@@ -946,7 +946,6 @@ body.yaktube-theater-mode .video-js {
   color: #fff !important;
   outline: none !important;
 }
-
 
 /* Suppress 404 Mascot and Error Page on Search results */
 body:has(#yaktube-ondemand-container) my-error-page,
