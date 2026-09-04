@@ -1,4 +1,30 @@
 
+  // 100% Incompatible Browser Suppression & Error Guardian
+  if (typeof window !== 'undefined') {
+    try {
+      window.displayIncompatibleBrowser = function () {};
+      var neuterIncompatible = function () {
+        var el = document.getElementById('incompatible-browser');
+        if (el) {
+          el.classList.add('browser-ok');
+          el.style.setProperty('display', 'none', 'important');
+          if (el.parentNode) el.parentNode.removeChild(el);
+        }
+      };
+      neuterIncompatible();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', neuterIncompatible);
+      }
+      try {
+        var incompObserver = new MutationObserver(function () {
+          neuterIncompatible();
+        });
+        incompObserver.observe(document.documentElement || document.body, { childList: true, subtree: true });
+      } catch (e) {}
+      setInterval(neuterIncompatible, 1000);
+    } catch (e) {}
+  }
+
   // Immediate URL rewrite: redirect legacy /search/videos to /search
   if (typeof window !== 'undefined' && window.location) {
     if (window.location.pathname === '/search/videos' || window.location.pathname.startsWith('/search/videos/')) {

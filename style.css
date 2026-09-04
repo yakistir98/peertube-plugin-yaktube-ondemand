@@ -1,4 +1,8 @@
-/* 100% Elimination of PeerTube Mobile Open-in-App Banner & Close Button */
+/* 100% Elimination of PeerTube Mobile Open-in-App & Incompatible Browser Banners */
+#incompatible-browser,
+.alert-light#incompatible-browser,
+div[id="incompatible-browser"],
+.incompatible-browser,
 .mobile-msg,
 my-header .mobile-msg,
 [class*='mobile-msg'],
@@ -16,7 +20,7 @@ button[title*='Dismiss'],
   pointer-events: none !important;
   opacity: 0 !important;
   position: absolute !important;
-  z-index: -99999 !important;
+  z-index: -999999 !important;
   clip: rect(0, 0, 0, 0) !important;
 }
 
