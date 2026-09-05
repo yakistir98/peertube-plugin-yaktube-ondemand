@@ -1772,7 +1772,7 @@ try {
                   clearInterval(pollInterval);
                   hideModal();
                   btn.disabled = false;
-                  btn.innerHTML = "📥 YakTube'a Aktar & İzle";
+                  btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
                   alert('Video indirme sırasında bir hata oluştu.');
                   announce('Video indirme sırasında bir hata oluştu.', true);
                 }
@@ -1785,7 +1785,7 @@ try {
               clearInterval(pollInterval);
               hideModal();
               btn.disabled = false;
-              btn.innerHTML = "📥 YakTube'a Aktar & İzle";
+              btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
               alert(
                 'İndirme arka planda tamamlanıyor. Ana sayfada veya Videolarım sayfasında kısa süre içinde hazır olacaktır.'
               );
@@ -1796,7 +1796,7 @@ try {
         .catch(function (err) {
           hideModal();
           btn.disabled = false;
-          btn.innerHTML = "📥 YakTube'a Aktar & İzle";
+          btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
           alert('İndirme hatası: ' + err.message);
           announce('İndirme hatası: ' + err.message, true);
         });
@@ -1859,7 +1859,7 @@ try {
         container.id = 'yaktube-ondemand-container';
         container.className = 'yaktube-ondemand-section';
         container.setAttribute('role', 'region');
-        container.setAttribute('aria-label', 'Canlı YouTube ve YakTube Arama Sonuçları');
+        container.setAttribute('aria-label', 'Canlı YouTube ve ' + getInstanceName() + ' Arama Sonuçları');
 
         var mainContent =
           document.querySelector('my-search, my-search-results, router-outlet, main, .main-col') || document.body;
@@ -2091,7 +2091,7 @@ try {
                                  getInstanceName();
                   var lWatchUrl = lItem.url || ('/videos/watch/' + (lItem.shortUUID || lItem.uuid));
                   var lViews = (lItem.views || 0) + ' görüntüleme';
-                  var lLabel = lItem.name + ', ' + lChannel + ', YakTube yerel sunucusunda mevcut, Süre: ' + lDuration;
+                  var lLabel = lItem.name + ', ' + lChannel + ', ' + getInstanceName() + ' yerel sunucusunda mevcut, Süre: ' + lDuration;
 
                   localCardsHtml +=
                     '<div class="yaktube-card yaktube-local-card" role="article" tabindex="0" aria-label="' +
@@ -2926,7 +2926,9 @@ try {
             item.localVideo.url +
             '" class="yaktube-play-btn yaktube-related-play-link" style="font-size:11px; padding:6px 10px;" aria-label="' +
             item.title.replace(/"/g, '&quot;') +
-            ' videosunu YakTube\'dan hemen izle">▶️ Hemen İzle</a>'
+            ' videosunu ' +
+            escapeHtml(getInstanceName()) +
+            '\'dan hemen izle">▶️ Hemen İzle</a>'
           : '<button class="yaktube-import-btn yaktube-related-import" data-url="' +
             item.url +
             '" data-title="' +
