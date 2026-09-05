@@ -960,3 +960,140 @@ body:has(#yaktube-ondemand-container) my-error-page {
   height: 0 !important;
   overflow: hidden !important;
 }
+
+/* -------------------------------------------------------------------------- */
+/* YakTube Local Video Shelf & Highlights (v1.4.29)                           */
+/* -------------------------------------------------------------------------- */
+.yaktube-local-shelf {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.yaktube-local-shelf-sub {
+  font-size: 12px;
+  color: #a7f3d0;
+  margin-top: 4px;
+  display: block;
+}
+
+.yaktube-local-card {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+.yaktube-local-card:hover,
+.yaktube-local-card:focus-within {
+  border-color: #10b981 !important;
+  box-shadow: 0 10px 22px rgba(16, 185, 129, 0.22) !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* YakTube Fediverse Bridge & Scope Selector (v1.4.29)                        */
+/* -------------------------------------------------------------------------- */
+.yaktube-fediverse-bridge {
+  margin: 28px 0 16px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  color: #ffffff;
+}
+
+.yaktube-fediverse-bridge-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.yaktube-fediverse-bridge-left {
+  flex: 1 1 320px;
+}
+
+.yaktube-fediverse-bridge-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.yaktube-fediverse-badge {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.yaktube-fediverse-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5b4fc;
+}
+
+.yaktube-fediverse-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.yaktube-fediverse-sub {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.yaktube-scope-selector {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.yaktube-scope-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.yaktube-scope-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.yaktube-scope-btn.active {
+  background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%);
+  color: #ffffff;
+  border-color: rgba(255, 143, 55, 0.4);
+  box-shadow: 0 2px 8px rgba(255, 143, 55, 0.35);
+  font-weight: 700;
+}
+
+.yaktube-scope-btn:focus-visible {
+  outline: 2px solid #ff8f37;
+  outline-offset: 2px;
+}
