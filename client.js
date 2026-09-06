@@ -75,33 +75,66 @@ try {
       return 'YakTube';
     }
 
-    // 1. Screen Reader Live Announcer
-    var liveRegion = null;
-    function getLiveRegion() {
-      if (!liveRegion || !document.body.contains(liveRegion)) {
-        liveRegion = document.getElementById('yaktube-a11y-live-region');
-        if (!liveRegion) {
-          liveRegion = document.createElement('div');
-          liveRegion.id = 'yaktube-a11y-live-region';
-          liveRegion.setAttribute('aria-live', 'polite');
-          liveRegion.setAttribute('aria-atomic', 'true');
-          liveRegion.className = 'yaktube-sr-only';
-          document.body.appendChild(liveRegion);
-        }
+    // 1. Screen Reader Live Announcer (W3C WCAG 2.2 AAA Compliant Auto-Clearing Engine)
+    function applySrOnlyStyles(el) {
+      el.className = 'yaktube-sr-only';
+      el.style.position = 'absolute';
+      el.style.width = '1px';
+      el.style.height = '1px';
+      el.style.padding = '0';
+      el.style.margin = '-1px';
+      el.style.overflow = 'hidden';
+      el.style.clip = 'rect(0, 0, 0, 0)';
+      el.style.whiteSpace = 'nowrap';
+      el.style.border = '0';
+    }
+
+    function getLiveRegion(assertive) {
+      var id = assertive ? 'yaktube-a11y-live-assertive' : 'yaktube-a11y-live-region';
+      var region = document.getElementById(id);
+      if (!region || !document.body.contains(region)) {
+        region = document.createElement('div');
+        region.id = id;
+        region.setAttribute('aria-live', assertive ? 'assertive' : 'polite');
+        region.setAttribute('aria-atomic', 'true');
+        region.setAttribute('aria-relevant', 'additions text');
+        applySrOnlyStyles(region);
+        document.body.appendChild(region);
       }
-      return liveRegion;
+      return region;
     }
 
     function announce(text, assertive) {
-      var region = getLiveRegion();
-      if (assertive) {
-        region.setAttribute('aria-live', 'assertive');
-      } else {
-        region.setAttribute('aria-live', 'polite');
+      if (!text || !String(text).trim()) return;
+      var strText = String(text).trim();
+      var region = getLiveRegion(assertive);
+
+      if (region._setTimer) {
+        clearTimeout(region._setTimer);
+        region._setTimer = null;
       }
+      if (region._clearTimer) {
+        clearTimeout(region._clearTimer);
+        region._clearTimer = null;
+      }
+
+      // Screen reader mutation trigger: clear first so repeat announcements are re-announced
       region.textContent = '';
-      setTimeout(function () {
-        region.textContent = text;
+
+      region._setTimer = setTimeout(function () {
+        region.textContent = strText;
+
+        // Seslendirme yapıldıktan veya ekran okuyucu kuyruğuna alındıktan sonra
+        // sayfanın en altında ya da sanal imleç gezintisinde eski metin kalmaması için
+        // DOM'daki duyuru metnini temizle (Metin uzunluğuna göre 3 ile 7 saniye arası)
+        var clearDelay = Math.min(7000, Math.max(3000, strText.length * 50));
+        region._clearTimer = setTimeout(function () {
+          if (region && document.body.contains(region)) {
+            region.textContent = '';
+          }
+          region._clearTimer = null;
+        }, clearDelay);
+        region._setTimer = null;
       }, 50);
     }
 

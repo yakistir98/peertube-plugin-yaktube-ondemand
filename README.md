@@ -15,7 +15,8 @@
 - **⚡ Live Web & YouTube On-Demand Search:** Seamlessly search YouTube directly within your instance search bar. If the video is already on your instance, it plays immediately; otherwise, users can import it in 1 click.
 - **🔥 Hybrid Smart Recommendations:** Intelligently discovers related content across local federated videos first, supplemented with relevant live discoveries.
 - **♿ Full Screen Reader Accessibility (A11y):**
-  - Dynamic result counters with live polite announcements (`aria-live`).
+  - Dynamic result counters with live polite and assertive announcements (`aria-live`).
+  - Auto-clearing live regions after speech lifecycle (WCAG 2.2 AAA compliant, prevents persistent DOM clutter for virtual cursors).
   - Accessible keyboard navigation modal (`?` shortcut).
   - Auto-labeled player controls, buttons, and thumbnails.
 - **💬 Dynamic Live YouTube Comments:** View original YouTube community comments under imported videos on demand.
