@@ -3481,7 +3481,7 @@ try {
       installBtn.id = 'yaktube-pwa-install-btn';
       installBtn.className = 'yaktube-pwa-btn';
       installBtn.setAttribute('type', 'button');
-      installBtn.setAttribute('aria-label', 'YakTube Mobil Uygulamasını Yükle');
+      installBtn.setAttribute('aria-label', getInstanceName() + ' Mobil Uygulamasını Yükle');
       installBtn.style.cssText =
         'background: linear-gradient(135deg, #ff8f37, #f97316); color: #000; border: none; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; box-shadow: 0 4px 12px rgba(255,143,55,0.4);';
       installBtn.innerHTML = '📲 Uygulamayı Yükle';
@@ -3492,7 +3492,7 @@ try {
           deferredInstallPrompt.userChoice.then(function (choiceResult) {
             if (choiceResult.outcome === 'accepted') {
               installBtn.remove();
-              announce('YakTube uygulaması cihazınıza yükleniyor.');
+              announce(getInstanceName() + ' uygulaması cihazınıza yükleniyor.');
             }
             deferredInstallPrompt = null;
           });
@@ -3502,12 +3502,19 @@ try {
       headerButtons.prepend(installBtn);
     }
 
-    function isYakTubeInstance() {
-      return window.location.hostname.includes('yaktube.yakhub.com.tr') || getInstanceName() === 'YakTube';
+    function isOfficialYakTubeServer() {
+      var host = (window.location.hostname || '').toLowerCase();
+      // Sadece ve sadece resmi YakTube alan adında veya yerel test ortamında çalışsın
+      // Diğer PeerTube sunucularında yaktube.apk dosyası olmayacağı için ASLA gösterilmez
+      return host === 'yaktube.yakhub.com.tr' || host === '127.0.0.1' || host === 'localhost';
     }
 
     function injectApkDownloadButton() {
-      if (!isYakTubeInstance()) return;
+      if (!isOfficialYakTubeServer()) {
+        var existBtnOther = document.getElementById('yaktube-apk-download-btn');
+        if (existBtnOther) existBtnOther.remove();
+        return;
+      }
       // 1. If inside APK: NEVER show APK button
       if (isInsideYakTubeApp) {
         var existBtnApp = document.getElementById('yaktube-apk-download-btn');
@@ -3552,7 +3559,11 @@ try {
     }
 
     function injectSidebarApkLink() {
-      if (!isYakTubeInstance()) return;
+      if (!isOfficialYakTubeServer()) {
+        var existLinkOther = document.getElementById('yaktube-sidebar-apk-link');
+        if (existLinkOther) existLinkOther.remove();
+        return;
+      }
       // If inside APK: NEVER show in sidebar
       if (isInsideYakTubeApp) {
         var existLink = document.getElementById('yaktube-sidebar-apk-link');
