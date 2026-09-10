@@ -151,6 +151,40 @@ try {
       document.head.appendChild(s);
     }
 
+    // Intercept and sanitize YakNet Account Web Component popup menu
+    function hookYakNetAccountComponent() {
+      if (typeof customElements === 'undefined') return;
+      customElements.whenDefined('yaknet-account').then(function () {
+        var YakNetAccount = customElements.get('yaknet-account');
+        if (!YakNetAccount || !YakNetAccount.prototype || YakNetAccount.prototype._yaktubeSanitizerHooked) return;
+        YakNetAccount.prototype._yaktubeSanitizerHooked = true;
+        var originalRender = YakNetAccount.prototype.render;
+        if (typeof originalRender === 'function') {
+          YakNetAccount.prototype.render = function () {
+            originalRender.call(this);
+            try {
+              if (this.shadowRoot) {
+                var isOfficial = isOfficialYakTubeServer();
+                // 1. In YakTube: Suppress redundant/recursive link to YakTube inside services list
+                var selfLinks = this.shadowRoot.querySelectorAll('a[href*="yaktube.yakhub.com.tr"]');
+                selfLinks.forEach(function (a) {
+                  a.style.display = 'none';
+                });
+                // 2. In third-party PeerTube instances: Suppress entire external services grid & header to avoid community backlash
+                if (!isOfficial) {
+                  var appsGrid = this.shadowRoot.querySelector('.yn-apps-grid');
+                  if (appsGrid) appsGrid.style.display = 'none';
+                  var sectionTitle = this.shadowRoot.querySelector('#yn-services-label, .yn-section-title');
+                  if (sectionTitle) sectionTitle.style.display = 'none';
+                }
+              }
+            } catch (e) {}
+          };
+        }
+      }).catch(function () {});
+    }
+    hookYakNetAccountComponent();
+
     // Silent background SSO Probe Engine
     function initSilentSSOProbe() {
       var token = localStorage.getItem('access_token');
@@ -440,7 +474,7 @@ try {
               btn.setAttribute('tabindex', '-1');
             });
 
-          if (!liveWidget) {
+          if (!liveWidget && isOfficialYakTubeServer()) {
             var widgetWrap = document.createElement('div');
             widgetWrap.id = 'yaknet-header-account-widget';
             widgetWrap.className = 'yaknet-header-widget';
@@ -476,35 +510,45 @@ try {
             } else {
               headerRight.prepend(widgetWrap);
             }
-          } else {
-            var el = liveWidget.querySelector('yaknet-account');
-            if (el) {
-              if (el.getAttribute('authenticated') !== 'true' || el.getAttribute('user-name') !== displayName) {
-                el.setAttribute('authenticated', 'true');
-                el.setAttribute('user-name', displayName);
-                el.setAttribute('user-email', emailStr);
-                if (typeof el.syncStateFromAttributes === 'function') {
-                  el.syncStateFromAttributes();
-                  el.render();
+          } else if (liveWidget) {
+            if (!isOfficialYakTubeServer()) {
+              liveWidget.remove();
+            } else {
+              var el = liveWidget.querySelector('yaknet-account');
+              if (el) {
+                if (el.getAttribute('authenticated') !== 'true' || el.getAttribute('user-name') !== displayName) {
+                  el.setAttribute('authenticated', 'true');
+                  el.setAttribute('user-name', displayName);
+                  el.setAttribute('user-email', emailStr);
+                  if (typeof el.syncStateFromAttributes === 'function') {
+                    el.syncStateFromAttributes();
+                    el.render();
+                  }
                 }
-              }
 
-              if (el.shadowRoot) {
-                var shadowLogoutBtn =
-                  el.shadowRoot.getElementById('logoutBtn') ||
-                  el.shadowRoot.querySelector('.yn-logout-btn') ||
-                  el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
-                if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
-                  shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
-                  shadowLogoutBtn.addEventListener(
-                    'click',
-                    function (ev) {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      performUnifiedLogout();
-                    },
-                    true
-                  );
+                if (el.shadowRoot) {
+                  // Direct DOM safety: remove self-link on polling cycle too
+                  var selfLinks = el.shadowRoot.querySelectorAll('a[href*="yaktube.yakhub.com.tr"]');
+                  selfLinks.forEach(function (a) {
+                    a.style.display = 'none';
+                  });
+
+                  var shadowLogoutBtn =
+                    el.shadowRoot.getElementById('logoutBtn') ||
+                    el.shadowRoot.querySelector('.yn-logout-btn') ||
+                    el.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
+                  if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
+                    shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
+                    shadowLogoutBtn.addEventListener(
+                      'click',
+                      function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        performUnifiedLogout();
+                      },
+                      true
+                    );
+                  }
                 }
               }
             }
