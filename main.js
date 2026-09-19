@@ -27,13 +27,7 @@ function resolveYtDlpPath(logger) {
         path.join(process.cwd(), 'bin', 'yt-dlp.exe'),
         'yt-dlp.exe'
       ]
-    : [
-        '/usr/local/bin/yt-dlp',
-        '/usr/bin/yt-dlp',
-        '/bin/yt-dlp',
-        path.join(process.cwd(), 'bin', 'yt-dlp'),
-        'yt-dlp'
-      ];
+    : ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp', '/bin/yt-dlp', path.join(process.cwd(), 'bin', 'yt-dlp'), 'yt-dlp'];
 
   for (const candidate of candidates) {
     try {
@@ -64,7 +58,7 @@ async function getDefaultChannelId(category) {
     return cachedChannels.defaultId || '1146';
   }
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const req = http.request(
       {
         hostname: '127.0.0.1',

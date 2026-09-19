@@ -1151,9 +1151,18 @@ body:has(#yaktube-ondemand-container) my-error-page {
 }
 
 @keyframes yaktube-ripple-bounce {
-  0% { transform: scale(0.7); opacity: 0.5; }
-  50% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.7);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1285,9 +1294,15 @@ body:has(#yaktube-ondemand-container) my-error-page {
 }
 
 @keyframes yaktube-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.04); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .yaktube-qr-wrapper {
@@ -1339,4 +1354,3 @@ body:has(#yaktube-ondemand-container) my-error-page {
   box-shadow: 0 6px 20px rgba(255, 143, 55, 0.4) !important;
   outline: none !important;
 }
-

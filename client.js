@@ -57,7 +57,11 @@ try {
 
     // Ensure Fediverse Global Search (SepiaSearch) is default in PeertubeServerConfig
     try {
-      if (window.PeertubeServerConfig && window.PeertubeServerConfig.search && window.PeertubeServerConfig.search.searchIndex) {
+      if (
+        window.PeertubeServerConfig &&
+        window.PeertubeServerConfig.search &&
+        window.PeertubeServerConfig.search.searchIndex
+      ) {
         window.PeertubeServerConfig.search.searchIndex.isDefaultSearch = true;
       }
     } catch (e) {}
@@ -157,34 +161,37 @@ try {
     // Intercept and sanitize YakNet Account Web Component popup menu
     function hookYakNetAccountComponent() {
       if (typeof customElements === 'undefined') return;
-      customElements.whenDefined('yaknet-account').then(function () {
-        var YakNetAccount = customElements.get('yaknet-account');
-        if (!YakNetAccount || !YakNetAccount.prototype || YakNetAccount.prototype._yaktubeSanitizerHooked) return;
-        YakNetAccount.prototype._yaktubeSanitizerHooked = true;
-        var originalRender = YakNetAccount.prototype.render;
-        if (typeof originalRender === 'function') {
-          YakNetAccount.prototype.render = function () {
-            originalRender.call(this);
-            try {
-              if (this.shadowRoot) {
-                var isOfficial = isOfficialYakTubeServer();
-                // 1. In YakTube: Suppress redundant/recursive link to YakTube inside services list
-                var selfLinks = this.shadowRoot.querySelectorAll('a[href*="yaktube.yakhub.com.tr"]');
-                selfLinks.forEach(function (a) {
-                  a.style.display = 'none';
-                });
-                // 2. In third-party PeerTube instances: Suppress entire external services grid & header to avoid community backlash
-                if (!isOfficial) {
-                  var appsGrid = this.shadowRoot.querySelector('.yn-apps-grid');
-                  if (appsGrid) appsGrid.style.display = 'none';
-                  var sectionTitle = this.shadowRoot.querySelector('#yn-services-label, .yn-section-title');
-                  if (sectionTitle) sectionTitle.style.display = 'none';
+      customElements
+        .whenDefined('yaknet-account')
+        .then(function () {
+          var YakNetAccount = customElements.get('yaknet-account');
+          if (!YakNetAccount || !YakNetAccount.prototype || YakNetAccount.prototype._yaktubeSanitizerHooked) return;
+          YakNetAccount.prototype._yaktubeSanitizerHooked = true;
+          var originalRender = YakNetAccount.prototype.render;
+          if (typeof originalRender === 'function') {
+            YakNetAccount.prototype.render = function () {
+              originalRender.call(this);
+              try {
+                if (this.shadowRoot) {
+                  var isOfficial = isOfficialYakTubeServer();
+                  // 1. In YakTube: Suppress redundant/recursive link to YakTube inside services list
+                  var selfLinks = this.shadowRoot.querySelectorAll('a[href*="yaktube.yakhub.com.tr"]');
+                  selfLinks.forEach(function (a) {
+                    a.style.display = 'none';
+                  });
+                  // 2. In third-party PeerTube instances: Suppress entire external services grid & header to avoid community backlash
+                  if (!isOfficial) {
+                    var appsGrid = this.shadowRoot.querySelector('.yn-apps-grid');
+                    if (appsGrid) appsGrid.style.display = 'none';
+                    var sectionTitle = this.shadowRoot.querySelector('#yn-services-label, .yn-section-title');
+                    if (sectionTitle) sectionTitle.style.display = 'none';
+                  }
                 }
-              }
-            } catch (e) {}
-          };
-        }
-      }).catch(function () {});
+              } catch (e) {}
+            };
+          }
+        })
+        .catch(function () {});
     }
     hookYakNetAccountComponent();
 
@@ -1296,20 +1303,34 @@ try {
 
       var header = document.createElement('div');
       header.className = 'yaktube-feature-modal-header';
-      header.innerHTML = '<h3 class="yaktube-feature-modal-title"><span>⏱️</span> Uyku Zamanlayıcısı</h3>' +
+      header.innerHTML =
+        '<h3 class="yaktube-feature-modal-title"><span>⏱️</span> Uyku Zamanlayıcısı</h3>' +
         '<button class="yaktube-feature-modal-close" aria-label="Kapat (Escape)">&times;</button>';
 
       var body = document.createElement('div');
       body.className = 'yaktube-feature-modal-body';
-      body.innerHTML = '<p class="yaktube-qr-desc">Videonun ne zaman durdurulacağını seçin. Süre bittiğinde ses yavaşça kısılarak oynatma durdurulur.</p>' +
+      body.innerHTML =
+        '<p class="yaktube-qr-desc">Videonun ne zaman durdurulacağını seçin. Süre bittiğinde ses yavaşça kısılarak oynatma durdurulur.</p>' +
         '<div class="yaktube-timer-options">' +
-        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '15' ? ' active' : '') + '" data-mins="15">15 Dakika</button>' +
-        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '30' ? ' active' : '') + '" data-mins="30">30 Dakika</button>' +
-        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '45' ? ' active' : '') + '" data-mins="45">45 Dakika</button>' +
-        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '60' ? ' active' : '') + '" data-mins="60">60 Dakika</button>' +
+        '<button class="yaktube-timer-btn' +
+        (sleepTimer.mode === '15' ? ' active' : '') +
+        '" data-mins="15">15 Dakika</button>' +
+        '<button class="yaktube-timer-btn' +
+        (sleepTimer.mode === '30' ? ' active' : '') +
+        '" data-mins="30">30 Dakika</button>' +
+        '<button class="yaktube-timer-btn' +
+        (sleepTimer.mode === '45' ? ' active' : '') +
+        '" data-mins="45">45 Dakika</button>' +
+        '<button class="yaktube-timer-btn' +
+        (sleepTimer.mode === '60' ? ' active' : '') +
+        '" data-mins="60">60 Dakika</button>' +
         '</div>' +
-        '<button class="yaktube-timer-btn' + (sleepTimer.mode === 'end' ? ' active' : '') + '" data-mins="end" style="width:100%;">🎬 Bu Video Bitince</button>' +
-        (sleepTimer.targetTime || sleepTimer.mode ? '<button id="yaktube-timer-cancel-btn" class="yaktube-timer-btn" style="background:#ef4444!important;color:#fff!important;border-color:#ef4444!important;">❌ Zamanlayıcıyı İptal Et</button>' : '');
+        '<button class="yaktube-timer-btn' +
+        (sleepTimer.mode === 'end' ? ' active' : '') +
+        '" data-mins="end" style="width:100%;">🎬 Bu Video Bitince</button>' +
+        (sleepTimer.targetTime || sleepTimer.mode
+          ? '<button id="yaktube-timer-cancel-btn" class="yaktube-timer-btn" style="background:#ef4444!important;color:#fff!important;border-color:#ef4444!important;">❌ Zamanlayıcıyı İptal Et</button>'
+          : '');
 
       card.appendChild(header);
       card.appendChild(body);
@@ -1376,18 +1397,24 @@ try {
 
       var header = document.createElement('div');
       header.className = 'yaktube-feature-modal-header';
-      header.innerHTML = '<h3 class="yaktube-feature-modal-title"><span>📱</span> Telefonda Devam Et</h3>' +
+      header.innerHTML =
+        '<h3 class="yaktube-feature-modal-title"><span>📱</span> Telefonda Devam Et</h3>' +
         '<button class="yaktube-feature-modal-close" aria-label="Kapat (Escape)">&times;</button>';
 
       var formattedTime = formatClockTime(currentSec);
-      var qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=' + encodeURIComponent(targetUrl);
+      var qrImageUrl =
+        'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=' + encodeURIComponent(targetUrl);
 
       var body = document.createElement('div');
       body.className = 'yaktube-feature-modal-body';
       body.innerHTML =
-        '<p class="yaktube-qr-desc">Telefonunuzun kamerasıyla QR kodu okutarak videoyu kaldığınız yerden (<strong>' + formattedTime + '</strong>) izlemeye devam edebilirsiniz.</p>' +
+        '<p class="yaktube-qr-desc">Telefonunuzun kamerasıyla QR kodu okutarak videoyu kaldığınız yerden (<strong>' +
+        formattedTime +
+        '</strong>) izlemeye devam edebilirsiniz.</p>' +
         '<div class="yaktube-qr-wrapper">' +
-        '<img src="' + qrImageUrl + '" alt="Video Bağlantısı QR Kodu" width="190" height="190" style="display:block;border-radius:8px;" />' +
+        '<img src="' +
+        qrImageUrl +
+        '" alt="Video Bağlantısı QR Kodu" width="190" height="190" style="display:block;border-radius:8px;" />' +
         '</div>' +
         '<button id="yaktube-qr-copy-action-btn" class="yaktube-qr-copy-btn">📋 Bağlantıyı Kopyala</button>';
 
@@ -1409,15 +1436,18 @@ try {
       var copyBtn = body.querySelector('#yaktube-qr-copy-action-btn');
       copyBtn.addEventListener('click', function () {
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(targetUrl).then(function () {
-            copyBtn.textContent = '✅ Bağlantı Kopyalandı!';
-            announce('Bağlantı panoya kopyalandı: ' + targetUrl);
-            setTimeout(function () {
-              copyBtn.textContent = '📋 Bağlantıyı Kopyala';
-            }, 2500);
-          }).catch(function () {
-            fallbackCopy(targetUrl, copyBtn);
-          });
+          navigator.clipboard
+            .writeText(targetUrl)
+            .then(function () {
+              copyBtn.textContent = '✅ Bağlantı Kopyalandı!';
+              announce('Bağlantı panoya kopyalandı: ' + targetUrl);
+              setTimeout(function () {
+                copyBtn.textContent = '📋 Bağlantıyı Kopyala';
+              }, 2500);
+            })
+            .catch(function () {
+              fallbackCopy(targetUrl, copyBtn);
+            });
         } else {
           fallbackCopy(targetUrl, copyBtn);
         }
@@ -1454,7 +1484,8 @@ try {
       if (!existing) {
         existing = document.createElement('div');
         existing.className = 'yaktube-doubletap-overlay ' + className;
-        existing.innerHTML = '<div class="yaktube-ripple-content">' + (isLeft ? '⏪ 10sn Geri' : '10sn İleri ⏩') + '</div>';
+        existing.innerHTML =
+          '<div class="yaktube-ripple-content">' + (isLeft ? '⏪ 10sn Geri' : '10sn İleri ⏩') + '</div>';
         container.appendChild(existing);
       }
       existing.classList.add('yaktube-ripple-active');
@@ -1466,7 +1497,8 @@ try {
 
     function initTouchSeekGesture(video) {
       if (!video) return;
-      var playerContainer = video.closest('.video-js, .player-container, .player, my-video-watch') || video.parentElement;
+      var playerContainer =
+        video.closest('.video-js, .player-container, .player, my-video-watch') || video.parentElement;
       if (!playerContainer || playerContainer.hasAttribute('data-yaktube-touch-seek-hooked')) return;
       playerContainer.setAttribute('data-yaktube-touch-seek-hooked', 'true');
 
@@ -1543,7 +1575,8 @@ try {
       }
 
       if (text === 'tam ekran' || text === 'büyük ekran' || text === 'tam ekran yap') {
-        var playerWrap = document.querySelector('.player-container, .video-player-container, my-video-watch .player') || video;
+        var playerWrap =
+          document.querySelector('.player-container, .video-player-container, my-video-watch .player') || video;
         if (playerWrap) {
           if (!document.fullscreenElement) {
             if (playerWrap.requestFullscreen) playerWrap.requestFullscreen();
@@ -2004,24 +2037,40 @@ try {
 
       bridge.innerHTML =
         '<div class="yaktube-fediverse-bridge-content">' +
-          '<div class="yaktube-fediverse-bridge-left">' +
-            '<div class="yaktube-fediverse-bridge-badge-wrap">' +
-              '<span class="yaktube-fediverse-badge">🌐 Fediverse Ağı</span>' +
-              '<span class="yaktube-fediverse-status">' +
-                (isFediverse ? 'SepiaSearch Küresel Fediverse Arama Aktif' : escapeHtml(getInstanceName()) + ' Yerel Arama Aktif') +
-              '</span>' +
-            '</div>' +
-            '<h2 class="yaktube-fediverse-title">🌐 Fediverse & Küresel Ağ Arama Sonuçları</h2>' +
-            '<p class="yaktube-fediverse-sub">Merkeziyetsiz federe ağdaki (SepiaSearch ve bağımsız PeerTube sunucuları) video sonuçları aşağıda listelenmektedir.</p>' +
-          '</div>' +
-          '<div class="yaktube-scope-selector" role="tablist" aria-label="Arama Kapsamı Seçimi">' +
-            '<button type="button" id="yaktube-scope-global-btn" class="yaktube-scope-btn ' + (isFediverse ? 'active' : '') + '" role="tab" aria-selected="' + (isFediverse ? 'true' : 'false') + '" aria-label="Tüm Fediverse ve SepiaSearch ağındaki videoları ara" title="Tüm Fediverse genelinde ara">' +
-              '🌐 Tüm Fediverse (SepiaSearch)' +
-            '</button>' +
-            '<button type="button" id="yaktube-scope-local-btn" class="yaktube-scope-btn ' + (!isFediverse ? 'active' : '') + '" role="tab" aria-selected="' + (!isFediverse ? 'true' : 'false') + '" aria-label="Sadece ' + escapeHtml(getInstanceName()) + ' yerel sunucusundaki videoları ara" title="Sadece ' + escapeHtml(getInstanceName()) + ' yerel kütüphanesinde ara">' +
-              '🏠 Sadece ' + escapeHtml(getInstanceName()) + ' (Yerel)' +
-            '</button>' +
-          '</div>' +
+        '<div class="yaktube-fediverse-bridge-left">' +
+        '<div class="yaktube-fediverse-bridge-badge-wrap">' +
+        '<span class="yaktube-fediverse-badge">🌐 Fediverse Ağı</span>' +
+        '<span class="yaktube-fediverse-status">' +
+        (isFediverse
+          ? 'SepiaSearch Küresel Fediverse Arama Aktif'
+          : escapeHtml(getInstanceName()) + ' Yerel Arama Aktif') +
+        '</span>' +
+        '</div>' +
+        '<h2 class="yaktube-fediverse-title">🌐 Fediverse & Küresel Ağ Arama Sonuçları</h2>' +
+        '<p class="yaktube-fediverse-sub">Merkeziyetsiz federe ağdaki (SepiaSearch ve bağımsız PeerTube sunucuları) video sonuçları aşağıda listelenmektedir.</p>' +
+        '</div>' +
+        '<div class="yaktube-scope-selector" role="tablist" aria-label="Arama Kapsamı Seçimi">' +
+        '<button type="button" id="yaktube-scope-global-btn" class="yaktube-scope-btn ' +
+        (isFediverse ? 'active' : '') +
+        '" role="tab" aria-selected="' +
+        (isFediverse ? 'true' : 'false') +
+        '" aria-label="Tüm Fediverse ve SepiaSearch ağındaki videoları ara" title="Tüm Fediverse genelinde ara">' +
+        '🌐 Tüm Fediverse (SepiaSearch)' +
+        '</button>' +
+        '<button type="button" id="yaktube-scope-local-btn" class="yaktube-scope-btn ' +
+        (!isFediverse ? 'active' : '') +
+        '" role="tab" aria-selected="' +
+        (!isFediverse ? 'true' : 'false') +
+        '" aria-label="Sadece ' +
+        escapeHtml(getInstanceName()) +
+        ' yerel sunucusundaki videoları ara" title="Sadece ' +
+        escapeHtml(getInstanceName()) +
+        ' yerel kütüphanesinde ara">' +
+        '🏠 Sadece ' +
+        escapeHtml(getInstanceName()) +
+        ' (Yerel)' +
+        '</button>' +
+        '</div>' +
         '</div>';
 
       var globalBtn = document.getElementById('yaktube-scope-global-btn');
@@ -2494,7 +2543,9 @@ try {
         '</div>' +
         '<div class="yaktube-loading">' +
         '<div class="yaktube-spinner" aria-hidden="true"></div>' +
-        '<div style="margin-top: 10px;">YouTube ve ' + escapeHtml(getInstanceName()) + ' yerel kütüphanesindeki eşleşmeler taranıyor...</div>' +
+        '<div style="margin-top: 10px;">YouTube ve ' +
+        escapeHtml(getInstanceName()) +
+        ' yerel kütüphanesindeki eşleşmeler taranıyor...</div>' +
         '</div>';
 
       var shortcutsBtn = document.getElementById('yaktube-open-shortcuts');
@@ -2607,7 +2658,7 @@ try {
                     statusBadge =
                       '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' +
                       escapeHtml(getInstanceName()) +
-                      '\'da Mevcut</span>';
+                      "'da Mevcut</span>";
                   }
 
                   var actionButton = '';
@@ -2626,9 +2677,11 @@ try {
                       escapeHtml(item.localVideo.url) +
                       '" class="yaktube-play-btn" aria-label="' +
                       escapeHtml(item.title) +
-                      ' videosunu ' + escapeHtml(getInstanceName()) + '\'dan hemen izle">▶️ ' +
+                      ' videosunu ' +
                       escapeHtml(getInstanceName()) +
-                      '\'dan İzle</a>';
+                      '\'dan hemen izle">▶️ ' +
+                      escapeHtml(getInstanceName()) +
+                      "'dan İzle</a>";
                   } else {
                     actionButton =
                       '<button class="yaktube-import-btn" data-url="' +
@@ -2641,10 +2694,10 @@ try {
                       escapeHtml(getInstanceName()) +
                       '\'a aktar ve izle">📥 ' +
                       escapeHtml(getInstanceName()) +
-                      '\'a Aktar & İzle</button>';
+                      "'a Aktar & İzle</button>";
                   }
 
-                  var durationText = isLive ? 'CANLI' : (item.durationFormatted || formatClockTime(item.duration));
+                  var durationText = isLive ? 'CANLI' : item.durationFormatted || formatClockTime(item.duration);
                   var cardLabel =
                     item.title +
                     (isLive ? ' (Canlı Yayın)' : isLocal ? ' (' + getInstanceName() + ' kütüphanenizde mevcut)' : '') +
@@ -2705,20 +2758,34 @@ try {
               if (localResults.length > 0) {
                 var localCardsHtml = '';
                 localResults.forEach(function (lItem) {
-                  var lThumb = lItem.thumbnailPath || (lItem.thumbnails && lItem.thumbnails[0] ? lItem.thumbnails[0].fileUrl : '/client/assets/images/default-thumbnail.jpg');
+                  var lThumb =
+                    lItem.thumbnailPath ||
+                    (lItem.thumbnails && lItem.thumbnails[0]
+                      ? lItem.thumbnails[0].fileUrl
+                      : '/client/assets/images/default-thumbnail.jpg');
                   var lDuration = formatClockTime(lItem.duration);
-                  var lChannel = (lItem.channel && (lItem.channel.displayName || lItem.channel.name)) ||
-                                 (lItem.account && (lItem.account.displayName || lItem.account.name)) ||
-                                 getInstanceName();
-                  var lWatchUrl = lItem.url || ('/videos/watch/' + (lItem.shortUUID || lItem.uuid));
+                  var lChannel =
+                    (lItem.channel && (lItem.channel.displayName || lItem.channel.name)) ||
+                    (lItem.account && (lItem.account.displayName || lItem.account.name)) ||
+                    getInstanceName();
+                  var lWatchUrl = lItem.url || '/videos/watch/' + (lItem.shortUUID || lItem.uuid);
                   var lViews = (lItem.views || 0) + ' görüntüleme';
-                  var lLabel = lItem.name + ', ' + lChannel + ', ' + getInstanceName() + ' yerel sunucusunda mevcut, Süre: ' + lDuration;
+                  var lLabel =
+                    lItem.name +
+                    ', ' +
+                    lChannel +
+                    ', ' +
+                    getInstanceName() +
+                    ' yerel sunucusunda mevcut, Süre: ' +
+                    lDuration;
 
                   localCardsHtml +=
                     '<div class="yaktube-card yaktube-local-card" role="article" tabindex="0" aria-label="' +
                     escapeHtml(lLabel) +
                     '">' +
-                    '<a href="' + escapeHtml(lWatchUrl) + '" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%;">' +
+                    '<a href="' +
+                    escapeHtml(lWatchUrl) +
+                    '" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%;">' +
                     '<div class="yaktube-thumb-wrap">' +
                     '<img class="yaktube-thumb-img" src="' +
                     escapeHtml(lThumb) +
@@ -2731,30 +2798,42 @@ try {
                     '</div>' +
                     '<div class="yaktube-info">' +
                     '<div>' +
-                    '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' + escapeHtml(getInstanceName()) + '\'da Mevcut</span>' +
+                    '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' +
+                    escapeHtml(getInstanceName()) +
+                    "'da Mevcut</span>" +
                     '<h3 class="yaktube-video-name" title="' +
                     escapeHtml(lItem.name) +
                     '" style="margin:0; font-size:13px; font-weight:600; line-height:1.35;">' +
                     escapeHtml(lItem.name) +
                     '</h3>' +
                     '<div class="yaktube-channel-name">' +
-                    escapeHtml(lChannel) + ' • ' + escapeHtml(lViews) +
+                    escapeHtml(lChannel) +
+                    ' • ' +
+                    escapeHtml(lViews) +
                     '</div>' +
                     '</div>' +
-                    '<div class="yaktube-play-btn" style="margin-top:8px;">▶️ ' + escapeHtml(getInstanceName()) + '\'dan Hemen İzle</div>' +
+                    '<div class="yaktube-play-btn" style="margin-top:8px;">▶️ ' +
+                    escapeHtml(getInstanceName()) +
+                    "'dan Hemen İzle</div>" +
                     '</div>' +
                     '</a>' +
                     '</div>';
                 });
 
                 localShelfHtml =
-                  '<div id="yaktube-local-shelf" class="yaktube-local-shelf" role="region" aria-label="' + escapeHtml(getInstanceName()) + ' Yerel Kütüphanesi">' +
+                  '<div id="yaktube-local-shelf" class="yaktube-local-shelf" role="region" aria-label="' +
+                  escapeHtml(getInstanceName()) +
+                  ' Yerel Kütüphanesi">' +
                   '<div class="yaktube-header" style="margin-top: 24px; border-bottom-color: rgba(16, 185, 129, 0.3);">' +
                   '<div class="yaktube-header-left">' +
                   '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">✅ Yerel Kütüphane</span>' +
                   '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">"' +
                   escapeHtml(query) +
-                  '" için ' + escapeHtml(getInstanceName()) + ' Sunucusunda ' + localTotal + ' Video Bulundu</h2>' +
+                  '" için ' +
+                  escapeHtml(getInstanceName()) +
+                  ' Sunucusunda ' +
+                  localTotal +
+                  ' Video Bulundu</h2>' +
                   '</div>' +
                   '<span class="yaktube-local-shelf-sub">Doğrudan sunucumuzda barındırılan, yüksek hızlı ve anında izlenebilen videolar</span>' +
                   '</div>' +
@@ -3350,7 +3429,8 @@ try {
               announce('"' + transcript + '" için arama başlatılıyor...', true);
               setTimeout(function () {
                 closeFullSearchModal();
-                window.location.href = '/search?search=' + encodeURIComponent(transcript) + '&searchTarget=search-index';
+                window.location.href =
+                  '/search?search=' + encodeURIComponent(transcript) + '&searchTarget=search-index';
               }, 500);
             }
           }
