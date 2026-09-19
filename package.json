@@ -43,7 +43,7 @@
   "author": "Enes Yakıştır <yakistir98@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yakistir98/peertube-plugin-yaktube-ondemand.git"
+    "url": "git+https://github.com/yakistir98/peertube-plugin-yaktube-ondemand.git"
   },
   "homepage": "https://yaktube.yakhub.com.tr",
   "bugs": "https://github.com/yakistir98/peertube-plugin-yaktube-ondemand/issues",
