@@ -2012,25 +2012,32 @@ try {
     }
 
     function ensureFediverseBridge(query, currentSearchTarget) {
+      var searchMount = document.querySelector('my-search, my-search-results');
+      if (!searchMount) return;
+
       var bridge = document.getElementById('yaktube-fediverse-bridge');
+      var ondemandContainer = document.getElementById('yaktube-ondemand-container');
+      var searchResult = searchMount.querySelector('.search-result');
+
       if (!bridge) {
         bridge = document.createElement('div');
         bridge.id = 'yaktube-fediverse-bridge';
         bridge.className = 'yaktube-fediverse-bridge';
         bridge.setAttribute('role', 'region');
         bridge.setAttribute('aria-label', 'Fediverse Video Arama Ağı ve Kapsam Seçimi');
+      }
 
-        var searchResult = document.querySelector('.search-result, my-search .search-result');
-        var ondemandContainer = document.getElementById('yaktube-ondemand-container');
-
-        if (searchResult && searchResult.parentNode) {
-          searchResult.parentNode.insertBefore(bridge, searchResult);
-        } else if (ondemandContainer && ondemandContainer.parentNode) {
-          ondemandContainer.parentNode.insertBefore(bridge, ondemandContainer.nextSibling);
-        } else {
-          var mainCol = document.querySelector('my-search, main, .main-col') || document.body;
-          mainCol.appendChild(bridge);
+      // Ensure bridge is always strictly inside searchMount
+      if (ondemandContainer && ondemandContainer.parentElement === searchMount) {
+        if (ondemandContainer.nextSibling !== bridge) {
+          searchMount.insertBefore(bridge, ondemandContainer.nextSibling);
         }
+      } else if (searchResult && searchResult.parentElement === searchMount) {
+        if (bridge.nextSibling !== searchResult) {
+          searchMount.insertBefore(bridge, searchResult);
+        }
+      } else if (bridge.parentElement !== searchMount) {
+        searchMount.appendChild(bridge);
       }
 
       var isFediverse = currentSearchTarget === 'search-index';
@@ -2199,8 +2206,8 @@ try {
         '</div>' +
         '</div>';
 
-      var mainMount =
-        document.querySelector('my-search, my-search-results, router-outlet, main, .main-col') || document.body;
+      var mainMount = document.querySelector('my-search, my-search-results, .main-col .main-row, .main-col, main');
+      if (!mainMount) mainMount = document.querySelector('.main-col');
       if (mainMount && mainMount.firstChild) {
         mainMount.insertBefore(liveContainer, mainMount.firstChild);
       } else if (mainMount) {
@@ -2491,6 +2498,14 @@ try {
 
       var query = searchParam.trim();
 
+      // Clean up any stray containers mistakenly attached directly to document.body
+      try {
+        var strays = document.querySelectorAll('body > #yaktube-ondemand-container, body > #yaktube-fediverse-bridge');
+        strays.forEach(function (s) {
+          s.remove();
+        });
+      } catch (e) {}
+
       // Ensure Fediverse Global Search (SepiaSearch) is default target if not specified in URL
       if (!url.searchParams.has('searchTarget')) {
         url.searchParams.set('searchTarget', 'search-index');
@@ -2499,34 +2514,40 @@ try {
       }
 
       var currentSearchTarget = url.searchParams.get('searchTarget') || 'search-index';
+
+      // CRITICAL: We MUST wait for Angular to mount the search view (<my-search>)!
+      // If we inject before <my-search> exists, it lands in document.body before <my-app>,
+      // which pushes the entire site header, sidebar, and layout down the page.
+      var searchMount = document.querySelector('my-search, my-search-results');
+      if (!searchMount) {
+        return;
+      }
+
       var queryKey = query + '___' + currentSearchTarget;
       var lastQueryKey = lastQuery + '___' + lastSearchTarget;
 
+      var container = document.getElementById('yaktube-ondemand-container');
+      var nativeResults = searchMount.querySelector('.search-result');
+
       if (queryKey === lastQueryKey) {
-        var existingBridge = document.getElementById('yaktube-fediverse-bridge');
-        if (!existingBridge && document.querySelector('my-search')) {
-          ensureFediverseBridge(query, currentSearchTarget);
+        if (container && container.parentElement !== searchMount) {
+          searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
         }
+        ensureFediverseBridge(query, currentSearchTarget);
         return;
       }
       lastQuery = query;
       lastSearchTarget = currentSearchTarget;
 
-      var container = document.getElementById('yaktube-ondemand-container');
       if (!container) {
         container = document.createElement('div');
         container.id = 'yaktube-ondemand-container';
         container.className = 'yaktube-ondemand-section';
         container.setAttribute('role', 'region');
         container.setAttribute('aria-label', 'Canlı YouTube ve ' + getInstanceName() + ' Arama Sonuçları');
-
-        var mainContent =
-          document.querySelector('my-search, my-search-results, router-outlet, main, .main-col') || document.body;
-        if (mainContent && mainContent.firstChild) {
-          mainContent.insertBefore(container, mainContent.firstChild);
-        } else if (mainContent) {
-          mainContent.appendChild(container);
-        }
+        searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
+      } else if (container.parentElement !== searchMount) {
+        searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
       }
 
       container.innerHTML =
