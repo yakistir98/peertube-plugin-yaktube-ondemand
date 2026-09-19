@@ -1097,3 +1097,246 @@ body:has(#yaktube-ondemand-container) my-error-page {
   outline: 2px solid #ff8f37;
   outline-offset: 2px;
 }
+
+/* -------------------------------------------------------------------------- */
+/* YAKTUBE TOUCH & MOBILE DOUBLE-TAP TO SEEK (v1.5.0)                         */
+/* -------------------------------------------------------------------------- */
+.yaktube-doubletap-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 40% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: none !important;
+  z-index: 9999 !important;
+  opacity: 0;
+  transition: opacity 0.25s ease-out !important;
+}
+
+.yaktube-doubletap-left {
+  left: 0 !important;
+  background: radial-gradient(circle at left center, rgba(255, 143, 55, 0.35) 0%, transparent 70%) !important;
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+}
+
+.yaktube-doubletap-right {
+  right: 0 !important;
+  background: radial-gradient(circle at right center, rgba(255, 143, 55, 0.35) 0%, transparent 70%) !important;
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+}
+
+.yaktube-doubletap-overlay.yaktube-ripple-active {
+  opacity: 1 !important;
+}
+
+.yaktube-ripple-content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(0, 0, 0, 0.75) !important;
+  border: 1px solid rgba(255, 143, 55, 0.6) !important;
+  border-radius: 50px !important;
+  padding: 12px 24px !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6) !important;
+  transform: scale(0.85);
+  animation: yaktube-ripple-bounce 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+@keyframes yaktube-ripple-bounce {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* YAKTUBE SLEEP TIMER & QR CODE MODALS (v1.5.0)                              */
+/* -------------------------------------------------------------------------- */
+.yaktube-feature-modal-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.82) !important;
+  backdrop-filter: blur(10px) !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  animation: yaktube-fade-in 0.2s ease-out !important;
+}
+
+.yaktube-feature-modal-card {
+  background: #18181f !important;
+  border: 1px solid rgba(255, 143, 55, 0.4) !important;
+  border-radius: 20px !important;
+  width: 100% !important;
+  max-width: 440px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85) !important;
+  color: #fff !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  animation: yaktube-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.yaktube-feature-modal-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 18px 24px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 143, 55, 0.08) !important;
+}
+
+.yaktube-feature-modal-title {
+  margin: 0 !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  color: #ff8f37 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.yaktube-feature-modal-close {
+  background: transparent !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  font-size: 22px !important;
+  cursor: pointer !important;
+  padding: 4px 8px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+.yaktube-feature-modal-close:hover,
+.yaktube-feature-modal-close:focus {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  outline: 2px solid #ff8f37 !important;
+}
+
+.yaktube-feature-modal-body {
+  padding: 24px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+.yaktube-timer-options {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+.yaktube-timer-btn {
+  background: #23232c !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f1f5f9 !important;
+  border-radius: 12px !important;
+  padding: 14px 12px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  text-align: center !important;
+}
+
+.yaktube-timer-btn:hover,
+.yaktube-timer-btn:focus-visible {
+  background: #2d2d38 !important;
+  border-color: #ff8f37 !important;
+  color: #ff8f37 !important;
+  transform: translateY(-2px) !important;
+  outline: none !important;
+  box-shadow: 0 4px 12px rgba(255, 143, 55, 0.25) !important;
+}
+
+.yaktube-timer-btn.active {
+  background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 15px rgba(255, 143, 55, 0.4) !important;
+}
+
+.yaktube-timer-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  background: rgba(255, 143, 55, 0.2) !important;
+  border: 1px solid #ff8f37 !important;
+  color: #ff8f37 !important;
+  padding: 4px 10px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  animation: yaktube-pulse 2s infinite !important;
+}
+
+@keyframes yaktube-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.yaktube-qr-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  background: #ffffff !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+  width: fit-content !important;
+  margin: 0 auto !important;
+}
+
+.yaktube-qr-wrapper svg {
+  display: block !important;
+  width: 190px !important;
+  height: 190px !important;
+}
+
+.yaktube-qr-desc {
+  font-size: 13px !important;
+  color: #94a3b8 !important;
+  text-align: center !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+}
+
+.yaktube-qr-copy-btn {
+  background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 12px 20px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+.yaktube-qr-copy-btn:hover,
+.yaktube-qr-copy-btn:focus-visible {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(255, 143, 55, 0.4) !important;
+  outline: none !important;
+}
+

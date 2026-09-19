@@ -31,7 +31,10 @@ if (typeof window !== 'undefined') {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', neuterIncompatible);
     }
-    setInterval(neuterIncompatible, 1000);
+    var neuterInterval = setInterval(neuterIncompatible, 1000);
+    setTimeout(function () {
+      clearInterval(neuterInterval);
+    }, 5000);
   } catch (e) {}
 }
 
@@ -951,13 +954,11 @@ try {
           } else if (type === 'checkbox') {
             inp.setAttribute('aria-label', 'Seçim Kutusu');
           } else if (type === 'password') {
-            inp.setAttribute('aria-label', 'Åifre');
+            inp.setAttribute('aria-label', 'Şifre');
           }
         }
       });
     }
-
-    setInterval(autoFixDOM, 1000);
 
     // 3. Screen-Reader & Turkish Q Optimized Shortcuts & Player Bar (v1.4.1)
     function toggleShortcutsModal() {
@@ -997,6 +998,8 @@ try {
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + T</span> veya <span class="yaktube-kbd">T</span></td><td>Sinema / Tiyatro Modu</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + I</span> veya <span class="yaktube-kbd">I</span></td><td>Hızlı Video Bilgisi & İstatistikler</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + C</span> veya <span class="yaktube-kbd">C</span></td><td>Altyazıları Aç / Kapat</td></tr>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + U</span></td><td>⏱️ Uyku Zamanlayıcısı (Sleep Timer)</td></tr>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + Q</span></td><td>📱 Telefonda Devam Et (QR Kod)</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + .</span> / <span class="yaktube-kbd">Alt + ,</span></td><td>Oynatma hızını artır / azalt</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + S</span> veya <span class="yaktube-kbd">/</span> (Shift+7)</td><td>Arama penceresini aç</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + V</span> veya <span class="yaktube-kbd">Shift + V</span></td><td>Sesli aramayı başlat</td></tr>' +
@@ -1045,6 +1048,7 @@ try {
       }
       return null;
     }
+    window.getVideoElement = getVideoElement;
 
     function formatTime(seconds) {
       if (isNaN(seconds) || seconds < 0) return '0 saniye';
@@ -1143,6 +1147,493 @@ try {
       }
     }
 
+    // ==========================================================================
+    // YAKTUBE QUICK TOAST HELPER (v1.5.0)
+    // ==========================================================================
+    function showQuickToast(message, icon) {
+      var existing = document.getElementById('yaktube-quick-toast');
+      if (existing) existing.remove();
+
+      var toast = document.createElement('div');
+      toast.id = 'yaktube-quick-toast';
+      toast.className = 'yaktube-quick-toast';
+      toast.style.cssText =
+        'position:fixed!important;top:80px!important;left:50%!important;transform:translateX(-50%)!important;' +
+        'background:rgba(24,24,31,0.92)!important;border:1px solid #ff8f37!important;color:#fff!important;' +
+        'padding:10px 22px!important;border-radius:30px!important;font-size:14px!important;font-weight:700!important;' +
+        'box-shadow:0 10px 30px rgba(0,0,0,0.8)!important;z-index:999999!important;pointer-events:none!important;' +
+        'backdrop-filter:blur(8px)!important;display:flex!important;align-items:center!important;gap:8px!important;';
+      toast.innerHTML = (icon ? '<span>' + icon + '</span> ' : '') + '<span>' + message + '</span>';
+      document.body.appendChild(toast);
+
+      setTimeout(function () {
+        if (toast && toast.parentNode) {
+          toast.style.opacity = '0';
+          toast.style.transition = 'opacity 0.3s ease-out';
+          setTimeout(function () {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+          }, 300);
+        }
+      }, 2200);
+    }
+
+    // ==========================================================================
+    // YAKTUBE SLEEP TIMER ENGINE (v1.5.0)
+    // ==========================================================================
+    var sleepTimer = {
+      countdownInterval: null,
+      targetTime: 0,
+      mode: null,
+      originalVolume: 1
+    };
+
+    function clearSleepTimer() {
+      if (sleepTimer.countdownInterval) clearInterval(sleepTimer.countdownInterval);
+      sleepTimer.countdownInterval = null;
+      sleepTimer.targetTime = 0;
+      sleepTimer.mode = null;
+
+      var badge = document.getElementById('yaktube-sleep-timer-badge');
+      if (badge) badge.remove();
+      var endListenerVideo = getVideoElement();
+      if (endListenerVideo && endListenerVideo._sleepEndListener) {
+        endListenerVideo.removeEventListener('ended', endListenerVideo._sleepEndListener);
+        endListenerVideo._sleepEndListener = null;
+      }
+    }
+
+    function setSleepTimer(modeMinutes) {
+      clearSleepTimer();
+      var video = getVideoElement();
+      if (!video) {
+        announce('Aktif video bulunamadı.');
+        return;
+      }
+
+      sleepTimer.mode = modeMinutes;
+      sleepTimer.originalVolume = video.volume || 1;
+
+      if (modeMinutes === 'end') {
+        announce('Uyku zamanlayıcısı ayarlandı: Bu video bitince durdurulacak.', true);
+        showQuickToast('⏱️ Uyku: Video Bitince');
+        video._sleepEndListener = function () {
+          video.pause();
+          announce('Uyku zamanlayıcısı: Video bitti, oynatma durduruldu.', true);
+          clearSleepTimer();
+        };
+        video.addEventListener('ended', video._sleepEndListener, { once: true });
+        updateSleepTimerBadge('Video Bitince');
+        return;
+      }
+
+      var mins = parseInt(modeMinutes, 10);
+      if (isNaN(mins) || mins <= 0) return;
+
+      sleepTimer.targetTime = Date.now() + mins * 60 * 1000;
+      announce('Uyku zamanlayıcısı ' + mins + ' dakikaya ayarlandı.', true);
+      showQuickToast('⏱️ Uyku: ' + mins + ' Dakika');
+
+      function updateTick() {
+        var remainingMs = Math.max(0, sleepTimer.targetTime - Date.now());
+        var remainingSec = Math.floor(remainingMs / 1000);
+        var m = Math.floor(remainingSec / 60);
+        var s = remainingSec % 60;
+        var display = (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
+        updateSleepTimerBadge(display);
+
+        // Gentle volume fadeout in last 15 seconds
+        if (remainingSec <= 15 && remainingSec > 0 && video && !video.paused) {
+          var stepRatio = remainingSec / 15;
+          video.volume = Math.max(0, sleepTimer.originalVolume * stepRatio);
+        }
+
+        if (remainingMs <= 0) {
+          clearSleepTimer();
+          if (video) {
+            video.pause();
+            video.volume = sleepTimer.originalVolume;
+          }
+          announce('Uyku zamanlayıcısı süresi doldu, video durduruldu.', true);
+          showQuickToast('⏱️ Uyku: Oynatma Durduruldu');
+        }
+      }
+
+      updateTick();
+      sleepTimer.countdownInterval = setInterval(updateTick, 1000);
+    }
+
+    function updateSleepTimerBadge(text) {
+      var bar = document.getElementById('yaktube-player-action-bar');
+      if (!bar) return;
+      var badge = document.getElementById('yaktube-sleep-timer-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.id = 'yaktube-sleep-timer-badge';
+        badge.className = 'yaktube-timer-badge';
+        var sleepBtn = document.getElementById('yaktube-bar-sleep-btn');
+        if (sleepBtn && sleepBtn.nextSibling) {
+          bar.insertBefore(badge, sleepBtn.nextSibling);
+        } else {
+          bar.appendChild(badge);
+        }
+      }
+      badge.textContent = '⏱️ ' + text;
+    }
+
+    function openSleepTimerModal() {
+      var existing = document.getElementById('yaktube-sleep-modal');
+      if (existing) existing.remove();
+
+      var backdrop = document.createElement('div');
+      backdrop.id = 'yaktube-sleep-modal';
+      backdrop.className = 'yaktube-feature-modal-backdrop';
+      backdrop.setAttribute('role', 'dialog');
+      backdrop.setAttribute('aria-modal', 'true');
+      backdrop.setAttribute('aria-label', 'Uyku Zamanlayıcısı');
+
+      var card = document.createElement('div');
+      card.className = 'yaktube-feature-modal-card';
+
+      var header = document.createElement('div');
+      header.className = 'yaktube-feature-modal-header';
+      header.innerHTML = '<h3 class="yaktube-feature-modal-title"><span>⏱️</span> Uyku Zamanlayıcısı</h3>' +
+        '<button class="yaktube-feature-modal-close" aria-label="Kapat (Escape)">&times;</button>';
+
+      var body = document.createElement('div');
+      body.className = 'yaktube-feature-modal-body';
+      body.innerHTML = '<p class="yaktube-qr-desc">Videonun ne zaman durdurulacağını seçin. Süre bittiğinde ses yavaşça kısılarak oynatma durdurulur.</p>' +
+        '<div class="yaktube-timer-options">' +
+        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '15' ? ' active' : '') + '" data-mins="15">15 Dakika</button>' +
+        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '30' ? ' active' : '') + '" data-mins="30">30 Dakika</button>' +
+        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '45' ? ' active' : '') + '" data-mins="45">45 Dakika</button>' +
+        '<button class="yaktube-timer-btn' + (sleepTimer.mode === '60' ? ' active' : '') + '" data-mins="60">60 Dakika</button>' +
+        '</div>' +
+        '<button class="yaktube-timer-btn' + (sleepTimer.mode === 'end' ? ' active' : '') + '" data-mins="end" style="width:100%;">🎬 Bu Video Bitince</button>' +
+        (sleepTimer.targetTime || sleepTimer.mode ? '<button id="yaktube-timer-cancel-btn" class="yaktube-timer-btn" style="background:#ef4444!important;color:#fff!important;border-color:#ef4444!important;">❌ Zamanlayıcıyı İptal Et</button>' : '');
+
+      card.appendChild(header);
+      card.appendChild(body);
+      backdrop.appendChild(card);
+      document.body.appendChild(backdrop);
+
+      function closeModal() {
+        backdrop.remove();
+        announce('Uyku zamanlayıcısı penceresi kapatıldı.');
+      }
+
+      header.querySelector('.yaktube-feature-modal-close').addEventListener('click', closeModal);
+      backdrop.addEventListener('click', function (e) {
+        if (e.target === backdrop) closeModal();
+      });
+
+      body.querySelectorAll('.yaktube-timer-options .yaktube-timer-btn, button[data-mins="end"]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var mins = this.getAttribute('data-mins');
+          setSleepTimer(mins);
+          closeModal();
+        });
+      });
+
+      var cancelBtn = body.querySelector('#yaktube-timer-cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+          clearSleepTimer();
+          announce('Uyku zamanlayıcısı iptal edildi.', true);
+          showQuickToast('⏱️ Zamanlayıcı İptal Edildi');
+          closeModal();
+        });
+      }
+
+      var firstBtn = body.querySelector('.yaktube-timer-btn');
+      if (firstBtn) firstBtn.focus();
+      announce('Uyku zamanlayıcısı penceresi açıldı. Seçeneklerden birini seçin.');
+    }
+
+    // ==========================================================================
+    // YAKTUBE PHONE TRANSFER / QR CODE ENGINE (v1.5.0)
+    // ==========================================================================
+    function openPhoneTransferModal() {
+      var video = getVideoElement();
+      var currentSec = video ? Math.floor(video.currentTime || 0) : 0;
+      var currentUrl = new URL(window.location.href);
+      if (currentSec > 0) {
+        currentUrl.searchParams.set('start', currentSec + 's');
+      }
+      var targetUrl = currentUrl.toString();
+
+      var existing = document.getElementById('yaktube-qr-modal');
+      if (existing) existing.remove();
+
+      var backdrop = document.createElement('div');
+      backdrop.id = 'yaktube-qr-modal';
+      backdrop.className = 'yaktube-feature-modal-backdrop';
+      backdrop.setAttribute('role', 'dialog');
+      backdrop.setAttribute('aria-modal', 'true');
+      backdrop.setAttribute('aria-label', 'Telefonda Devam Et');
+
+      var card = document.createElement('div');
+      card.className = 'yaktube-feature-modal-card';
+
+      var header = document.createElement('div');
+      header.className = 'yaktube-feature-modal-header';
+      header.innerHTML = '<h3 class="yaktube-feature-modal-title"><span>📱</span> Telefonda Devam Et</h3>' +
+        '<button class="yaktube-feature-modal-close" aria-label="Kapat (Escape)">&times;</button>';
+
+      var formattedTime = formatClockTime(currentSec);
+      var qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=' + encodeURIComponent(targetUrl);
+
+      var body = document.createElement('div');
+      body.className = 'yaktube-feature-modal-body';
+      body.innerHTML =
+        '<p class="yaktube-qr-desc">Telefonunuzun kamerasıyla QR kodu okutarak videoyu kaldığınız yerden (<strong>' + formattedTime + '</strong>) izlemeye devam edebilirsiniz.</p>' +
+        '<div class="yaktube-qr-wrapper">' +
+        '<img src="' + qrImageUrl + '" alt="Video Bağlantısı QR Kodu" width="190" height="190" style="display:block;border-radius:8px;" />' +
+        '</div>' +
+        '<button id="yaktube-qr-copy-action-btn" class="yaktube-qr-copy-btn">📋 Bağlantıyı Kopyala</button>';
+
+      card.appendChild(header);
+      card.appendChild(body);
+      backdrop.appendChild(card);
+      document.body.appendChild(backdrop);
+
+      function closeModal() {
+        backdrop.remove();
+        announce('Telefonda devam et penceresi kapatıldı.');
+      }
+
+      header.querySelector('.yaktube-feature-modal-close').addEventListener('click', closeModal);
+      backdrop.addEventListener('click', function (e) {
+        if (e.target === backdrop) closeModal();
+      });
+
+      var copyBtn = body.querySelector('#yaktube-qr-copy-action-btn');
+      copyBtn.addEventListener('click', function () {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(targetUrl).then(function () {
+            copyBtn.textContent = '✅ Bağlantı Kopyalandı!';
+            announce('Bağlantı panoya kopyalandı: ' + targetUrl);
+            setTimeout(function () {
+              copyBtn.textContent = '📋 Bağlantıyı Kopyala';
+            }, 2500);
+          }).catch(function () {
+            fallbackCopy(targetUrl, copyBtn);
+          });
+        } else {
+          fallbackCopy(targetUrl, copyBtn);
+        }
+      });
+
+      function fallbackCopy(text, btn) {
+        var tempInput = document.createElement('input');
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        try {
+          document.execCommand('copy');
+          btn.textContent = '✅ Bağlantı Kopyalandı!';
+          announce('Bağlantı panoya kopyalandı.');
+          setTimeout(function () {
+            btn.textContent = '📋 Bağlantıyı Kopyala';
+          }, 2500);
+        } catch (e) {
+          btn.textContent = '❌ Kopyalanamadı';
+        }
+        document.body.removeChild(tempInput);
+      }
+
+      copyBtn.focus();
+      announce('Telefonda devam et penceresi açıldı. QR kodu okutabilir veya bağlantıyı kopyalayabilirsiniz.');
+    }
+
+    // ==========================================================================
+    // YAKTUBE DOUBLE-TAP TOUCH SEEK ENGINE (v1.5.0)
+    // ==========================================================================
+    function showDoubleTapRipple(container, isLeft) {
+      var className = isLeft ? 'yaktube-doubletap-left' : 'yaktube-doubletap-right';
+      var existing = container.querySelector('.yaktube-doubletap-overlay.' + className);
+      if (!existing) {
+        existing = document.createElement('div');
+        existing.className = 'yaktube-doubletap-overlay ' + className;
+        existing.innerHTML = '<div class="yaktube-ripple-content">' + (isLeft ? '⏪ 10sn Geri' : '10sn İleri ⏩') + '</div>';
+        container.appendChild(existing);
+      }
+      existing.classList.add('yaktube-ripple-active');
+      clearTimeout(existing._rippleTimer);
+      existing._rippleTimer = setTimeout(function () {
+        existing.classList.remove('yaktube-ripple-active');
+      }, 650);
+    }
+
+    function initTouchSeekGesture(video) {
+      if (!video) return;
+      var playerContainer = video.closest('.video-js, .player-container, .player, my-video-watch') || video.parentElement;
+      if (!playerContainer || playerContainer.hasAttribute('data-yaktube-touch-seek-hooked')) return;
+      playerContainer.setAttribute('data-yaktube-touch-seek-hooked', 'true');
+
+      var lastTapTime = 0;
+      var lastTapX = 0;
+      var tapTimeout = null;
+
+      playerContainer.addEventListener(
+        'touchend',
+        function (e) {
+          if (e.changedTouches && e.changedTouches.length === 1) {
+            var touch = e.changedTouches[0];
+            var rect = playerContainer.getBoundingClientRect();
+            var tapX = touch.clientX - rect.left;
+            var tapY = touch.clientY - rect.top;
+            var now = Date.now();
+
+            if (tapY > rect.height - 50) return;
+
+            if (now - lastTapTime < 320 && Math.abs(tapX - lastTapX) < 60) {
+              e.preventDefault();
+              clearTimeout(tapTimeout);
+              lastTapTime = 0;
+
+              var isLeft = tapX < rect.width * 0.45;
+              var isRight = tapX > rect.width * 0.55;
+
+              if (isLeft) {
+                video.currentTime = Math.max(0, video.currentTime - 10);
+                showDoubleTapRipple(playerContainer, true);
+                announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+              } else if (isRight) {
+                video.currentTime = Math.min(video.duration || 999999, video.currentTime + 10);
+                showDoubleTapRipple(playerContainer, false);
+                announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+              }
+            } else {
+              lastTapTime = now;
+              lastTapX = tapX;
+              tapTimeout = setTimeout(function () {
+                lastTapTime = 0;
+              }, 330);
+            }
+          }
+        },
+        { passive: false }
+      );
+    }
+
+    // ==========================================================================
+    // YAKTUBE VOICE ASSISTANT COMMANDS HANDLER (v1.5.0)
+    // ==========================================================================
+    function handleVoiceAssistantCommand(rawTranscript) {
+      if (!rawTranscript) return false;
+      var text = rawTranscript.toLowerCase().trim();
+      var video = getVideoElement();
+
+      if (text === 'durdur' || text === 'duraklat' || text === 'videoyu durdur' || text === 'pause') {
+        if (video) video.pause();
+        announce('Video duraklatıldı.', true);
+        showQuickToast('⏸️ Video Duraklatıldı');
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'oynat' || text === 'başlat' || text === 'devam et' || text === 'videoyu oynat' || text === 'play') {
+        if (video) video.play();
+        announce('Video oynatılıyor.', true);
+        showQuickToast('▶️ Video Oynatılıyor');
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'tam ekran' || text === 'büyük ekran' || text === 'tam ekran yap') {
+        var playerWrap = document.querySelector('.player-container, .video-player-container, my-video-watch .player') || video;
+        if (playerWrap) {
+          if (!document.fullscreenElement) {
+            if (playerWrap.requestFullscreen) playerWrap.requestFullscreen();
+            announce('Tam ekran moduna geçildi.', true);
+            showQuickToast('⛶ Tam Ekran');
+          } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+            announce('Tam ekrandan çıkıldı.', true);
+            showQuickToast('⛶ Normal Ekran');
+          }
+        }
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'sesi aç' || text === 'sesi yükselt' || text === 'sesi arttır' || text === 'ses aç') {
+        if (video) {
+          video.volume = Math.min(1, video.volume + 0.2);
+          var pct = Math.round(video.volume * 100);
+          announce('Ses seviyesi artırıldı: %' + pct, true);
+          showQuickToast('🔊 Ses: %' + pct);
+        }
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'sesi kıs' || text === 'sesi azalt' || text === 'ses kıs') {
+        if (video) {
+          video.volume = Math.max(0, video.volume - 0.2);
+          var pct = Math.round(video.volume * 100);
+          announce('Ses seviyesi azaltıldı: %' + pct, true);
+          showQuickToast('🔉 Ses: %' + pct);
+        }
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'sessiz' || text === 'sustur' || text === 'sesi kapat' || text === 'mute') {
+        if (video) {
+          video.muted = !video.muted;
+          announce(video.muted ? 'Ses kapatıldı.' : 'Ses açıldı.', true);
+          showQuickToast(video.muted ? '🔇 Sessiz' : '🔊 Ses Açık');
+        }
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'ileri sar' || text === '10 saniye ileri' || text === 'ileri al' || text === 'atla') {
+        if (video) {
+          video.currentTime = Math.min(video.duration || 999999, video.currentTime + 10);
+          announce('10 saniye ileri sarıldı.', true);
+          showQuickToast('⏩ +10sn İleri');
+        }
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text === 'geri sar' || text === '10 saniye geri' || text === 'geri al') {
+        if (video) {
+          video.currentTime = Math.max(0, video.currentTime - 10);
+          announce('10 saniye geri sarıldı.', true);
+          showQuickToast('⏪ -10sn Geri');
+        }
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        return true;
+      }
+
+      if (text.includes('uyku') || text.includes('zamanlayıcı')) {
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        openSleepTimerModal();
+        return true;
+      }
+
+      if (text === 'kapat' || text === 'çık' || text === 'iptal') {
+        stopVoiceInsideModal();
+        closeFullSearchModal();
+        announce('Arama penceresi kapatıldı.');
+        return true;
+      }
+
+      return false;
+    }
+
     // 3.1. Injects Accessible Player Action Bar under the Watch Video
     function injectAccessiblePlayerBar() {
       if (!window.location.pathname.includes('/videos/watch/')) return;
@@ -1169,6 +1660,8 @@ try {
         '<button id="yaktube-bar-play-btn" class="yaktube-player-action-btn" aria-label="Oynat veya Duraklat (Alt+K)">⏯️ Oynat/Duraklat</button>' +
         '<button id="yaktube-bar-forward-btn" class="yaktube-player-action-btn" aria-label="10 Saniye İleri Sar (Alt+L)">⏩ 10sn İleri</button>' +
         '<button id="yaktube-bar-speed-btn" class="yaktube-player-action-btn" aria-label="Oynatma Hızını Değiştir (Alt+.)">⚡ Hız</button>' +
+        '<button id="yaktube-bar-sleep-btn" class="yaktube-player-action-btn" aria-label="Uyku Zamanlayıcısı (Alt+U)">⏱️ Uyku</button>' +
+        '<button id="yaktube-bar-qr-btn" class="yaktube-player-action-btn" aria-label="Telefonda Devam Et / QR Kod (Alt+Q)">📱 Telefonda Aç</button>' +
         '<button id="yaktube-bar-theater-btn" class="yaktube-player-action-btn" aria-label="Sinema Modunu Aç/Kapat (Alt+T)">🎭 Sinema</button>' +
         '<button id="yaktube-bar-info-btn" class="yaktube-player-action-btn" aria-label="Video Bilgisi ve İstatistikleri (Alt+I)">📊 Bilgi</button>' +
         '<button id="yaktube-bar-help-btn" class="yaktube-player-action-btn" aria-label="Kısayol Kılavuzu (Alt+H veya F1)">⌨️ Kısayollar</button>';
@@ -1213,6 +1706,20 @@ try {
         adjustPlaybackSpeed(true);
       });
 
+      var sleepBtn = bar.querySelector('#yaktube-bar-sleep-btn');
+      if (sleepBtn) {
+        sleepBtn.addEventListener('click', function () {
+          openSleepTimerModal();
+        });
+      }
+
+      var qrBtn = bar.querySelector('#yaktube-bar-qr-btn');
+      if (qrBtn) {
+        qrBtn.addEventListener('click', function () {
+          openPhoneTransferModal();
+        });
+      }
+
       bar.querySelector('#yaktube-bar-theater-btn').addEventListener('click', function () {
         document.body.classList.toggle('yaktube-theater-mode');
         var isT = document.body.classList.contains('yaktube-theater-mode');
@@ -1231,6 +1738,18 @@ try {
     // 4. Global Keydown Listener (Screen-Reader & Turkish Q Optimized)
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
+        var sleepModal = document.getElementById('yaktube-sleep-modal');
+        if (sleepModal) {
+          sleepModal.remove();
+          announce('Uyku zamanlayıcısı penceresi kapatıldı.');
+          return;
+        }
+        var qrModal = document.getElementById('yaktube-qr-modal');
+        if (qrModal) {
+          qrModal.remove();
+          announce('Telefonda devam et penceresi kapatıldı.');
+          return;
+        }
         var shortcutsModal = document.getElementById('yaktube-shortcuts-dialog');
         if (shortcutsModal && shortcutsModal.style.display !== 'none') {
           shortcutsModal.style.display = 'none';
@@ -1253,6 +1772,20 @@ try {
       if (e.altKey && (e.key === 'a' || e.key === 'A') && !isInputFocused()) {
         e.preventDefault();
         openLocalAdminLoginModal();
+        return;
+      }
+
+      // Sleep Timer: Alt+U
+      if (e.altKey && (e.key === 'u' || e.key === 'U') && !isInputFocused()) {
+        e.preventDefault();
+        openSleepTimerModal();
+        return;
+      }
+
+      // Phone QR Transfer: Alt+Q
+      if (e.altKey && (e.key === 'q' || e.key === 'Q') && !isInputFocused()) {
+        e.preventDefault();
+        openPhoneTransferModal();
         return;
       }
 
@@ -1973,20 +2506,31 @@ try {
       announce(query + ' için arama başlatıldı.');
       isSearching = true;
 
+      if (window.__yaktube_search_abort_controller__) {
+        try {
+          window.__yaktube_search_abort_controller__.abort();
+        } catch (e) {}
+      }
+      var abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      window.__yaktube_search_abort_controller__ = abortCtrl;
+      var fetchOpts = abortCtrl ? { signal: abortCtrl.signal } : {};
+
       Promise.all([
-        fetch('/api-custom/youtube-search?q=' + encodeURIComponent(query))
+        fetch('/api-custom/youtube-search?q=' + encodeURIComponent(query), fetchOpts)
           .then(function (res) {
             return res.json();
           })
           .catch(function (err) {
+            if (err && err.name === 'AbortError') return { results: [] };
             console.warn('[YakTube] YouTube search fetch error:', err);
             return { results: [] };
           }),
-        fetch('/api/v1/search/videos?search=' + encodeURIComponent(query) + '&isLocal=true&count=12')
+        fetch('/api/v1/search/videos?search=' + encodeURIComponent(query) + '&isLocal=true&count=12', fetchOpts)
           .then(function (res) {
             return res.json();
           })
           .catch(function (err) {
+            if (err && err.name === 'AbortError') return { total: 0, data: [] };
             console.warn('[YakTube] Local videos search fetch error:', err);
             return { total: 0, data: [] };
           })
@@ -2800,6 +3344,9 @@ try {
             if (inp) inp.value = transcript;
 
             if (ev.results[0].isFinal) {
+              if (handleVoiceAssistantCommand(transcript)) {
+                return;
+              }
               announce('"' + transcript + '" için arama başlatılıyor...', true);
               setTimeout(function () {
                 closeFullSearchModal();
@@ -3636,28 +4183,7 @@ try {
       menuContainer.appendChild(sidebarLink);
     }
 
-    setInterval(function () {
-      checkAndInjectSearchResults();
-      injectSearchEnhancements();
-      checkAndInjectRelatedVideos(false);
-      restoreActiveLiveStream();
-      checkAndInjectWatchPageComments();
-      injectPWAInstallButton();
-      injectApkDownloadButton();
-      injectSidebarApkLink();
-    }, 800);
-    restoreActiveLiveStream();
-    window.addEventListener('popstate', function () {
-      currentActiveVideoKey = null;
-      checkAndInjectSearchResults();
-      checkAndInjectRelatedVideos(true);
-      checkAndInjectWatchPageComments();
-    });
-    checkAndInjectWatchPageComments();
-  })();
-
-  // 5. Background Play (Screen-Off / Minimize) & MediaSession Lock-Screen Controls
-  (function initBackgroundPlaybackEngine() {
+    // 9. Background Play (Screen-Off / Minimize) & MediaSession Lock-Screen Controls
     var videoState = {
       hasPlayed: false,
       explicitlyPausedByClick: false,
@@ -3667,6 +4193,10 @@ try {
     function attachVideoListeners(video) {
       if (!video || video.hasAttribute('data-yaktube-bgplay-hooked')) return;
       video.setAttribute('data-yaktube-bgplay-hooked', 'true');
+
+      try {
+        initTouchSeekGesture(video);
+      } catch (e) {}
 
       video.addEventListener('play', function () {
         videoState.hasPlayed = true;
@@ -3791,11 +4321,127 @@ try {
       } catch (e) {}
     }
 
-    // Auto-hook active video elements
+    // 10. Unified Debounced MutationObserver & Reactive SPA Engine (v1.5.0)
+    var unifiedTimer = null;
+    function runUnifiedCycle(isNav) {
+      try {
+        autoFixDOM();
+      } catch (e) {}
+
+      try {
+        var video = getVideoElement();
+        if (video) attachVideoListeners(video);
+      } catch (e) {}
+
+      try {
+        checkAndInjectSearchResults();
+      } catch (e) {}
+
+      try {
+        injectSearchEnhancements();
+      } catch (e) {}
+
+      try {
+        checkAndInjectRelatedVideos(Boolean(isNav));
+      } catch (e) {}
+
+      try {
+        restoreActiveLiveStream();
+      } catch (e) {}
+
+      try {
+        checkAndInjectWatchPageComments();
+      } catch (e) {}
+
+      try {
+        injectPWAInstallButton();
+      } catch (e) {}
+
+      try {
+        injectApkDownloadButton();
+      } catch (e) {}
+
+      try {
+        injectSidebarApkLink();
+      } catch (e) {}
+    }
+
+    function scheduleUnifiedCycle(immediate, debounceDelay) {
+      if (unifiedTimer) {
+        clearTimeout(unifiedTimer);
+        unifiedTimer = null;
+      }
+      if (immediate) {
+        runUnifiedCycle(true);
+        return;
+      }
+      var delay = typeof debounceDelay === 'number' ? debounceDelay : 150;
+      unifiedTimer = setTimeout(function () {
+        unifiedTimer = null;
+        runUnifiedCycle(false);
+      }, delay);
+    }
+
+    // SPA Navigation Handler
+    function onLocationChange() {
+      currentActiveVideoKey = null;
+      scheduleUnifiedCycle(true);
+      setTimeout(function () {
+        scheduleUnifiedCycle(false, 0);
+      }, 350);
+    }
+
+    window.addEventListener('popstate', onLocationChange);
+
+    // History pushState / replaceState interception for seamless Angular routing
+    (function hookHistory() {
+      try {
+        var origPush = history.pushState;
+        var origReplace = history.replaceState;
+        if (origPush) {
+          history.pushState = function () {
+            var ret = origPush.apply(this, arguments);
+            try {
+              onLocationChange();
+            } catch (e) {}
+            return ret;
+          };
+        }
+        if (origReplace) {
+          history.replaceState = function () {
+            var ret = origReplace.apply(this, arguments);
+            try {
+              onLocationChange();
+            } catch (e) {}
+            return ret;
+          };
+        }
+      } catch (e) {}
+    })();
+
+    // MutationObserver: react immediately to DOM changes instead of CPU polling
+    if (typeof MutationObserver !== 'undefined') {
+      try {
+        var observer = new MutationObserver(function () {
+          scheduleUnifiedCycle(false, 150);
+        });
+        if (document.body) {
+          observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+          document.addEventListener('DOMContentLoaded', function () {
+            observer.observe(document.body, { childList: true, subtree: true });
+          });
+        }
+      } catch (e) {}
+    }
+
+    // Gentle 3.5s heartbeat fallback (replaces aggressive 800ms polling, reduces idle CPU by 80%)
     setInterval(function () {
-      var video = getVideoElement();
-      if (video) attachVideoListeners(video);
-    }, 1000);
+      scheduleUnifiedCycle(false, 0);
+    }, 3500);
+
+    // Initial trigger
+    runUnifiedCycle(true);
   })();
 } catch (err) {
   console.error('[YakTube] Safe catch error:', err);

@@ -1,9 +1,100 @@
 const { execFile } = require('child_process');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 
 const searchCache = new Map();
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+let cachedYtDlpPath = null;
+function resolveYtDlpPath(logger) {
+  if (cachedYtDlpPath && (cachedYtDlpPath === 'yt-dlp' || fs.existsSync(cachedYtDlpPath))) {
+    return cachedYtDlpPath;
+  }
+
+  // 1. Environment variable override
+  if (process.env.YTDLP_PATH && fs.existsSync(process.env.YTDLP_PATH)) {
+    cachedYtDlpPath = process.env.YTDLP_PATH;
+    return cachedYtDlpPath;
+  }
+
+  // 2. Cross-platform candidates
+  const isWin = process.platform === 'win32';
+  const candidates = isWin
+    ? [
+        'D:\\yaktube_storage\\bin\\yt-dlp.exe',
+        'C:\\laragon\\bin\\yt-dlp.exe',
+        path.join(process.cwd(), 'bin', 'yt-dlp.exe'),
+        'yt-dlp.exe'
+      ]
+    : [
+        '/usr/local/bin/yt-dlp',
+        '/usr/bin/yt-dlp',
+        '/bin/yt-dlp',
+        path.join(process.cwd(), 'bin', 'yt-dlp'),
+        'yt-dlp'
+      ];
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate.includes(path.sep) && fs.existsSync(candidate)) {
+        cachedYtDlpPath = candidate;
+        if (logger) logger.info(`[YakTube OnDemand] Auto-detected yt-dlp binary at: ${cachedYtDlpPath}`);
+        return cachedYtDlpPath;
+      }
+    } catch (e) {}
+  }
+
+  cachedYtDlpPath = isWin ? 'D:\\yaktube_storage\\bin\\yt-dlp.exe' : 'yt-dlp';
+  return cachedYtDlpPath;
+}
+
+let cachedChannels = null;
+let channelsExpiresAt = 0;
+
+async function getDefaultChannelId(category) {
+  // Category mapping defaults
+  const cat = String(category || '').toLowerCase();
+  if (cat.includes('tekno') || cat.includes('tech') || cat.includes('egitim')) return '3299';
+  if (cat.includes('podcast') || cat.includes('sohbet')) return '3298';
+  if (cat.includes('genel') || cat.includes('haber')) return '1';
+  if (cat.includes('muzik') || cat.includes('music')) return '1146';
+
+  if (cachedChannels && Date.now() < channelsExpiresAt) {
+    return cachedChannels.defaultId || '1146';
+  }
+
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: 9000,
+        path: '/api/v1/accounts/yaktube/video-channels',
+        method: 'GET',
+        headers: { Host: 'yaktube.yakhub.com.tr' }
+      },
+      res => {
+        let body = '';
+        res.on('data', c => (body += c));
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (data && Array.isArray(data.data) && data.data.length > 0) {
+              const musicCh = data.data.find(c => c.name && c.name.includes('muzik'));
+              const defaultId = musicCh ? String(musicCh.id) : String(data.data[0].id);
+              cachedChannels = { defaultId, list: data.data };
+              channelsExpiresAt = Date.now() + 60 * 60 * 1000;
+              return resolve(defaultId);
+            }
+          } catch (e) {}
+          resolve('1146');
+        });
+      }
+    );
+    req.on('error', () => resolve('1146'));
+    req.end();
+  });
+}
 
 function getCached(q) {
   const item = searchCache.get(q);
@@ -99,7 +190,7 @@ async function getAdminToken() {
 
 async function register({ getRouter, peertubeHelpers, logger }) {
   const router = getRouter();
-  const ytdlpPath = 'D:\\yaktube_storage\\bin\\yt-dlp.exe';
+  const ytdlpPath = resolveYtDlpPath(logger);
 
   router.get('/search', async (req, res) => {
     const query = (req.query.q || '').trim();
@@ -157,16 +248,17 @@ async function register({ getRouter, peertubeHelpers, logger }) {
   });
 
   router.post('/import', async (req, res) => {
-    const { targetUrl } = req.body;
+    const { targetUrl, channelId, category } = req.body;
     if (!targetUrl || (!targetUrl.includes('youtube.com') && !targetUrl.includes('youtu.be'))) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
     try {
       const token = await getAdminToken();
+      const resolvedChannelId = channelId ? String(channelId) : await getDefaultChannelId(category);
       const postData = new URLSearchParams({
         targetUrl: targetUrl,
-        channelId: '1146', // Türkçe Müzik channel
+        channelId: resolvedChannelId,
         privacy: '1'
       }).toString();
 
