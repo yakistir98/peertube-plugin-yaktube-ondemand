@@ -4547,3 +4547,9 @@ try {
 } catch (err) {
   console.error('[YakTube] Safe catch error:', err);
 }
+
+export async function register(options) {
+  return true;
+}
+export { register as registerClient };
+export default register;
