@@ -153,7 +153,7 @@ try {
     ) {
       var s = document.createElement('script');
       s.id = 'yaknet-account-script';
-      s.src = 'https://auth.yakhub.com.tr/js/yaknet-account.js';
+      s.src = 'https://cdnjs.yakhub.com.tr/ajax/libs/yaknet-account/latest/yaknet-account.js';
       s.async = true;
       document.head.appendChild(s);
     }
@@ -213,7 +213,7 @@ try {
       if (!document.getElementById(iframeId)) {
         var iframe = document.createElement('iframe');
         iframe.id = iframeId;
-        iframe.src = 'https://auth.yakhub.com.tr/sdk/sso-frame';
+        iframe.src = 'https://developer-console.yakhub.com.tr/sdk/sso-frame';
         iframe.title = 'YakNet Oturum Kontrolü';
         iframe.setAttribute('aria-hidden', 'true');
         iframe.tabIndex = -1;
@@ -232,7 +232,7 @@ try {
       sessionStorage.removeItem('yaknet_manual_logout');
       var callbackUrl = 'https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback';
       window.location.href =
-        'https://auth.yakhub.com.tr/oauth/authorize?client_id=01a03c41-f758-721e-b927-619bffde5c23&redirect_uri=' +
+        'https://developer-console.yakhub.com.tr/oauth/authorize?client_id=01a03c41-f758-721e-b927-619bffde5c23&redirect_uri=' +
         encodeURIComponent(callbackUrl) +
         '&response_type=code&scope=';
     }
@@ -262,7 +262,7 @@ try {
       }
     });
 
-    // Global listener for YakNet SSO broadcast from auth.yakhub.com.tr
+    // Global listener for YakNet SSO broadcast from developer-console.yakhub.com.tr
     window.addEventListener('yaknet-auth', function (e) {
       if (e.detail && e.detail.authenticated && e.detail.user) {
         var token = localStorage.getItem('access_token');
@@ -307,7 +307,8 @@ try {
         sessionStorage.setItem('yaknet_manual_logout', 'true');
       } catch (err) {}
       window.location.replace(
-        'https://auth.yakhub.com.tr/sdk/logout?redirect_uri=' + encodeURIComponent('https://yaktube.yakhub.com.tr')
+        'https://developer-console.yakhub.com.tr/sdk/logout?redirect_uri=' +
+          encodeURIComponent('https://yaktube.yakhub.com.tr')
       );
     }
 
@@ -496,7 +497,7 @@ try {
               '<yaknet-account ' +
               'client-id="01a03c41-f758-721e-b927-619bffde5c23" ' +
               'redirect-uri="https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback" ' +
-              'base-url="https://auth.yakhub.com.tr" ' +
+              'base-url="https://developer-console.yakhub.com.tr" ' +
               'login-url="/login" ' +
               'authenticated="true" ' +
               'user-name="' +
@@ -612,12 +613,12 @@ try {
           '<p style="font-size: 13px; color: #94a3b8; margin-bottom: 16px; line-height: 1.45;">' +
           'YouTube gibi tek bir YakNet hesabıyla güvenle giriş yapabilir, kendi video ve müzik kanallarınızı oluşturabilirsiniz.' +
           '</p>' +
-          '<a href="https://auth.yakhub.com.tr/oauth/authorize?client_id=01a03c41-f758-721e-b927-619bffde5c23&redirect_uri=https%3A%2F%2Fyaktube.yakhub.com.tr%2Fplugins%2Fpeertube-plugin-auth-yaknet%2Frouter%2Fauth-callback&response_type=code&scope=" class="yaknet-sso-login-btn" aria-label="YakNet Hesabınız ile Tek Tıkla Giriş Yapın">' +
+          '<a href="https://developer-console.yakhub.com.tr/oauth/authorize?client_id=01a03c41-f758-721e-b927-619bffde5c23&redirect_uri=https%3A%2F%2Fyaktube.yakhub.com.tr%2Fplugins%2Fpeertube-plugin-auth-yaknet%2Frouter%2Fauth-callback&response_type=code&scope=" class="yaknet-sso-login-btn" aria-label="YakNet Hesabınız ile Tek Tıkla Giriş Yapın">' +
           '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>' +
           '<span>YakNet ile Giriş Yap</span>' +
           '</a>' +
           '<div style="margin-top: 14px; font-size: 13px; color: #94a3b8;">' +
-          'YakNet hesabınız yok mu? <a href="https://auth.yakhub.com.tr/register" target="_blank" rel="noopener noreferrer" style="color: #ff8f37; font-weight: 600; text-decoration: underline;">YakNet Hesabı Oluştur</a>' +
+          'YakNet hesabınız yok mu? <a href="https://developer-console.yakhub.com.tr/register" target="_blank" rel="noopener noreferrer" style="color: #ff8f37; font-weight: 600; text-decoration: underline;">YakNet Hesabı Oluştur</a>' +
           '</div>' +
           '<div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11.5px; color: #64748b; line-height: 1.45;">' +
           'Giriş yaparak <a href="/about/instance" target="_blank" style="color: #94a3b8; text-decoration: underline;">Kullanım Koşulları</a>\'nı ve <a href="/about/instance" target="_blank" style="color: #94a3b8; text-decoration: underline;">Gizlilik Politikası</a>\'nı kabul etmiş sayılırsınız.' +
@@ -637,8 +638,7 @@ try {
 
         var registerLinks = document.querySelectorAll('a[href*="/signup"], a[href*="/register"]');
         registerLinks.forEach(function (l) {
-          l.href = 'https://auth.yakhub.com.tr/register';
-          l.target = '_blank';
+          l.href = 'https://developer-console.yakhub.com.tr/register';
           l.innerText = 'YakNet Hesabı Oluştur';
         });
 
@@ -2995,7 +2995,7 @@ try {
       if (email) headers['X-User-Email'] = email;
       if (username) headers['X-User-Username'] = username;
 
-      var authUrl = 'https://auth.yakhub.com.tr/api/yaktube/search-history' + (queryParams || '');
+      var authUrl = 'https://developer-console.yakhub.com.tr/api/yaktube/search-history' + (queryParams || '');
       var bridgeUrl = '/api-custom/search-history' + (queryParams || '');
 
       var options = {
