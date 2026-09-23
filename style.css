@@ -1354,3 +1354,130 @@ body:has(#yaktube-ondemand-container) my-error-page {
   box-shadow: 0 6px 20px rgba(255, 143, 55, 0.4) !important;
   outline: none !important;
 }
+
+/* ==========================================================================
+   YAKTUBE ACCESSIBLE PLAYER & WATCH PAGE STYLES (W3C WAI-ARIA)
+   ========================================================================== */
+
+/* 1. Accessible Skip Link (Top of Page) */
+.yaktube-skip-link {
+  position: fixed !important;
+  top: -120px !important;
+  left: 16px !important;
+  background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%) !important;
+  color: #ffffff !important;
+  padding: 12px 22px !important;
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  text-decoration: none !important;
+  box-shadow: 0 8px 30px rgba(255, 143, 55, 0.5) !important;
+  z-index: 999999 !important;
+  transition: top 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.yaktube-skip-link:focus,
+.yaktube-skip-link:focus-visible {
+  top: 16px !important;
+  outline: 3px solid #ffffff !important;
+  outline-offset: 3px !important;
+}
+
+/* 2. Accessible Video Player Container Focus States */
+#videojs-wrapper:focus,
+#videojs-wrapper:focus-visible,
+.video-js:focus-visible {
+  outline: 3px solid #ff8f37 !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 25px rgba(255, 143, 55, 0.65) !important;
+  border-radius: 8px !important;
+}
+
+/* 3. Accessible Player Action Toolbar */
+.yaktube-player-action-bar {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin: 12px 0 18px 0 !important;
+  padding: 10px 16px !important;
+  background: rgba(24, 24, 32, 0.95) !important;
+  border: 1px solid rgba(255, 143, 55, 0.3) !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(10px) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.yaktube-player-bar-label {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #ff8f37 !important;
+  margin-right: 6px !important;
+  user-select: none !important;
+}
+
+.yaktube-player-action-btn {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #eeeeee !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  padding: 7px 14px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+}
+
+.yaktube-player-action-btn:hover,
+.yaktube-player-action-btn:focus-visible {
+  background: rgba(255, 143, 55, 0.25) !important;
+  border-color: #ff8f37 !important;
+  color: #ffffff !important;
+  transform: translateY(-1px) !important;
+  outline: 2px solid #ff8f37 !important;
+  outline-offset: 2px !important;
+}
+
+/* 4. Rate Buttons Distinct Separation (Like & Dislike) */
+my-video-rate .video-actions,
+my-video-rate .video-actions-rates,
+my-video-rate {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+my-video-rate button.action-button {
+  margin-right: 6px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+my-video-rate button.action-button:focus-visible {
+  outline: 2px solid #ff8f37 !important;
+  outline-offset: 2px !important;
+}
+
+/* 5. Date Toggle Button Clarity */
+my-date-toggle .date-toggle {
+  cursor: pointer !important;
+  border-radius: 6px !important;
+  padding: 2px 6px !important;
+  transition: background 0.2s ease !important;
+}
+
+my-date-toggle .date-toggle:hover,
+my-date-toggle .date-toggle:focus-visible {
+  background: rgba(255, 143, 55, 0.15) !important;
+  color: #ff8f37 !important;
+  outline: 2px solid #ff8f37 !important;
+  outline-offset: 1px !important;
+}

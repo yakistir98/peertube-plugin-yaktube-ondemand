@@ -55,6 +55,24 @@ try {
     } catch (e) {}
     console.log('[YakTube] YakNet SSO, Custom Branding, A11y & On-Demand Engine Active');
 
+    // Global Suppression of role="application" on Video Elements (W3C WAI-ARIA Screen Reader Compliance)
+    try {
+      if (
+        typeof HTMLVideoElement !== 'undefined' &&
+        HTMLVideoElement.prototype &&
+        !HTMLVideoElement.prototype._yaktubeA11yHooked
+      ) {
+        HTMLVideoElement.prototype._yaktubeA11yHooked = true;
+        var origVideoSetAttribute = HTMLVideoElement.prototype.setAttribute;
+        HTMLVideoElement.prototype.setAttribute = function (name, val) {
+          if (String(name).toLowerCase() === 'role' && String(val).toLowerCase() === 'application') {
+            return; // 100% suppress role="application" on video tags
+          }
+          return origVideoSetAttribute.apply(this, arguments);
+        };
+      }
+    } catch (e) {}
+
     // Ensure Fediverse Global Search (SepiaSearch) is default in PeertubeServerConfig
     try {
       if (
@@ -671,6 +689,7 @@ try {
 
     // 3. Intelligent Branding & A11y DOM Auto-Fixer
     function autoFixDOM() {
+      enhanceVideoPlayerAccessibility();
       injectAccessiblePlayerBar();
 
       // Check if on 403 / unauthorized page and provide admin login button
@@ -997,7 +1016,9 @@ try {
           '<table class="yaktube-shortcuts-table" style="width:100%; border-collapse:collapse; font-size:13px;">' +
           '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; color:#aaa;"><th style="padding:6px 0;">Kısayol (Evrensel / Tek Tuş)</th><th style="padding:6px 0;">İşlev</th></tr></thead>' +
           '<tbody>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + P</span> veya <span class="yaktube-kbd">Shift + P</span></td><td>🎬 Video Oynatıcıya Odaklan (Atla)</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + K</span> veya <span class="yaktube-kbd">Space</span></td><td>Oynat / Duraklat</td></tr>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Shift + N</span></td><td>Sonraki Videoya Geç</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + J</span> veya <span class="yaktube-kbd">J</span></td><td>10 saniye geri sar</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + L</span> veya <span class="yaktube-kbd">L</span></td><td>10 saniye ileri sar</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + Yukarı / Aşağı</span></td><td>Sesi %5 artır / azalt</td></tr>' +
@@ -1667,6 +1688,385 @@ try {
       return false;
     }
 
+    // ==========================================================================
+    // YAKTUBE ACCESSIBLE VIDEO PLAYER & WATCH PAGE ENGINE (W3C WAI-ARIA)
+    // ==========================================================================
+    function focusVideoPlayer() {
+      var playerWrapper = document.getElementById('videojs-wrapper') || document.querySelector('.video-js');
+      if (playerWrapper) {
+        playerWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        playerWrapper.focus();
+        var titleEl = document.querySelector(
+          'h1.video-info-name, .video-info-name h1, my-video-watch h1, .video-title, .title'
+        );
+        var videoTitle = titleEl ? titleEl.textContent.trim() : 'Video';
+        var video = getVideoElement();
+        var status = video ? (video.paused ? 'Duraklatıldı' : 'Oynatılıyor') : '';
+        announce(
+          'Video oynatıcıya odaklanıldı: ' +
+            videoTitle +
+            (status ? ' (' + status + ')' : '') +
+            '. Oynatmak için Boşluk veya K, sarmak için J veya L tuşlarını kullanabilirsiniz.'
+        );
+      }
+    }
+    window.focusVideoPlayer = focusVideoPlayer;
+
+    function sanitizeWatchPageLabels(videoTitle) {
+      // 1. Next Video button in Video.js control bar
+      var nextBtns = document.querySelectorAll(
+        '.vjs-next-video-control, .vjs-next-control, button[title*="Next video"], button[aria-label*="Next video"]'
+      );
+      nextBtns.forEach(function (btn) {
+        btn.setAttribute('aria-label', 'Sonraki Video (Shift+N)');
+        btn.setAttribute('title', 'Sonraki Video (Shift+N)');
+        var ctrlText = btn.querySelector('.vjs-control-text');
+        if (ctrlText && ctrlText.textContent.includes('Next video')) {
+          ctrlText.textContent = 'Sonraki Video (Shift+N)';
+        }
+      });
+
+      // 2. Share modal button
+      var shareBtns = document.querySelectorAll(
+        'button[aria-label*="share this video"], button[title*="share this video"], .action-button[aria-label*="share this video"]'
+      );
+      shareBtns.forEach(function (btn) {
+        btn.setAttribute('aria-label', 'Videoyu Paylaş');
+        btn.setAttribute('title', 'Videoyu Paylaş');
+      });
+
+      // 3. Download modal button
+      var downloadBtns = document.querySelectorAll(
+        'button[aria-label*="download this video"], button[title*="download this video"], .action-button[aria-label*="download this video"]'
+      );
+      downloadBtns.forEach(function (btn) {
+        btn.setAttribute('aria-label', 'Videoyu İndir');
+        btn.setAttribute('title', 'Videoyu İndir');
+      });
+
+      // 4. Subscription dropdown / button
+      var subDropdowns = document.querySelectorAll(
+        'button[aria-label*="subscription"], .action-dropdown[aria-label*="subscription"], my-subscribe-button button'
+      );
+      subDropdowns.forEach(function (btn) {
+        var cur = (btn.getAttribute('aria-label') || '').toLowerCase();
+        if (cur.includes('subscription') || cur.includes('dropdown')) {
+          btn.setAttribute('aria-label', 'Abonelik Seçenekleri');
+          btn.setAttribute('title', 'Abonelik Seçenekleri');
+        }
+      });
+
+      // 5. Account management link
+      var accountLinks = document.querySelectorAll(
+        'a[aria-label*="manage your account"], a[title*="manage your account"]'
+      );
+      accountLinks.forEach(function (a) {
+        a.setAttribute('aria-label', 'Hesap Yönetim Sayfası');
+        a.setAttribute('title', 'Hesap Yönetim Sayfası');
+      });
+
+      // 6. Date Toggle Button (Clean up "Bu tarih birimini ... olarak değistir")
+      var dateToggles = document.querySelectorAll('my-date-toggle, .date-toggle, [role="button"].date-toggle');
+      dateToggles.forEach(function (el) {
+        var rawText = (el.textContent || '').trim();
+        var cleanDate = rawText.replace(/^[•\s]+|[•\s]+$/g, '').trim();
+        if (cleanDate) {
+          var dateLabel = 'Yayınlanma Tarihi: ' + cleanDate + ' (Tarih biçimini değiştirmek için tıklayın)';
+          if (el.getAttribute('aria-label') !== dateLabel) {
+            el.setAttribute('aria-label', dateLabel);
+          }
+          if (el.getAttribute('title') !== dateLabel) {
+            el.setAttribute('title', dateLabel);
+          }
+        }
+      });
+
+      // 7. Video Rate Buttons (Like & Dislike distinct separation)
+      var rateContainer = document.querySelector('my-video-rate, .video-actions-rates');
+      if (rateContainer) {
+        var buttons = rateContainer.querySelectorAll('button');
+        buttons.forEach(function (btn) {
+          var label = (
+            btn.getAttribute('aria-label') ||
+            btn.getAttribute('title') ||
+            btn.textContent ||
+            ''
+          ).toLowerCase();
+          var icon = btn.querySelector('my-global-icon, i, svg');
+          var iconName = icon ? icon.className || icon.getAttribute('name') || icon.getAttribute('iconName') || '' : '';
+
+          var isDislike =
+            label.includes('beğenme') ||
+            label.includes('dislike') ||
+            iconName.includes('thumbs-down') ||
+            iconName.includes('thumb-down');
+          var isLike =
+            !isDislike &&
+            (label.includes('beğen') ||
+              label.includes('like') ||
+              iconName.includes('thumbs-up') ||
+              iconName.includes('thumb-up'));
+
+          var isPressed =
+            btn.classList.contains('active') ||
+            btn.classList.contains('liked') ||
+            btn.getAttribute('aria-pressed') === 'true';
+
+          if (isDislike) {
+            btn.setAttribute('aria-label', isPressed ? 'Videoyu Beğenme (Seçildi)' : 'Videoyu Beğenme');
+            btn.setAttribute('title', 'Videoyu Beğenme');
+          } else if (isLike) {
+            btn.setAttribute('aria-label', isPressed ? 'Videoyu Beğen (Seçildi)' : 'Videoyu Beğen');
+            btn.setAttribute('title', 'Videoyu Beğen');
+          }
+        });
+      }
+
+      // 8. Channel Avatar Link (Turn vague single letter "y" into descriptive channel link)
+      var channelSection = document.querySelector('.video-info-channel, my-account-on-channel-avatar');
+      if (channelSection) {
+        var channelNameEl = document.querySelector('.video-info-channel-left-links a, a.single-link, .channel-name');
+        var channelName = channelNameEl ? channelNameEl.textContent.trim() : '';
+        var avatarAnchor = channelSection.querySelector('my-account-on-channel-avatar a, .actor-avatar a, .avatar a');
+        if (avatarAnchor) {
+          var cLabel = channelName ? channelName + ' Kanalı ve Profil Resmi' : 'Kanal Profil Resmi';
+          avatarAnchor.setAttribute('aria-label', cLabel);
+          avatarAnchor.setAttribute('title', cLabel);
+          var avatarImg = avatarAnchor.querySelector('img');
+          if (avatarImg) {
+            avatarImg.setAttribute('alt', cLabel);
+          }
+        }
+      }
+
+      // 9. Actions Dropdown ("Eylem" / "More" button)
+      var actionsDropdownBtn = document.querySelector(
+        'my-video-actions-dropdown button, .action-dropdown button, my-action-buttons my-video-actions-dropdown'
+      );
+      if (actionsDropdownBtn) {
+        actionsDropdownBtn.setAttribute('aria-label', 'Diğer Video Seçenekleri ve İşlemler');
+        actionsDropdownBtn.setAttribute('title', 'Diğer Video Seçenekleri ve İşlemler');
+      }
+    }
+
+    function enhanceVideoPlayerAccessibility() {
+      var isWatchPage = window.location.pathname.includes('/videos/watch/');
+      var skipLink = document.getElementById('yaktube-skip-to-player');
+
+      if (!isWatchPage) {
+        if (skipLink) skipLink.remove();
+        return;
+      }
+
+      // 1. Remove harmful role="application" from video and containers
+      var videos = document.querySelectorAll('video, .vjs-tech');
+      videos.forEach(function (v) {
+        if (v.getAttribute('role') === 'application' || v.hasAttribute('role')) {
+          v.removeAttribute('role');
+        }
+      });
+
+      var appElements = document.querySelectorAll(
+        '#video-wrapper [role="application"], #videojs-wrapper [role="application"], .video-js [role="application"]'
+      );
+      appElements.forEach(function (el) {
+        el.removeAttribute('role');
+      });
+
+      // 2. Fetch current video title for accessible announcements
+      var titleEl = document.querySelector(
+        'h1.video-info-name, .video-info-name h1, my-video-watch h1, .video-title, .title'
+      );
+      var videoTitle = titleEl ? titleEl.textContent.trim() : 'Video';
+
+      // 3. Setup Top-Level Skip Link: "🎬 Video Oynatıcıya Atla (Alt+P)"
+      if (!skipLink) {
+        skipLink = document.createElement('a');
+        skipLink.id = 'yaktube-skip-to-player';
+        skipLink.className = 'yaktube-skip-link';
+        skipLink.href = '#videojs-wrapper';
+        skipLink.textContent = '🎬 Video Oynatıcıya Atla (Alt+P)';
+        skipLink.setAttribute('aria-label', 'Video Oynatıcıya Atla (Alt+P)');
+        skipLink.addEventListener('click', function (e) {
+          e.preventDefault();
+          focusVideoPlayer();
+        });
+        document.body.insertBefore(skipLink, document.body.firstChild);
+      }
+
+      // 4. Configure Player Container (#videojs-wrapper or .video-js)
+      var playerWrapper = document.getElementById('videojs-wrapper') || document.querySelector('.video-js');
+      if (playerWrapper) {
+        if (!playerWrapper.hasAttribute('data-yaktube-a11y-enhanced')) {
+          playerWrapper.setAttribute('data-yaktube-a11y-enhanced', 'true');
+          playerWrapper.setAttribute('role', 'region');
+          playerWrapper.setAttribute('aria-roledescription', 'Video Oynatıcı');
+          playerWrapper.setAttribute('tabindex', '0');
+
+          // Focus event: announce player status
+          playerWrapper.addEventListener('focus', function () {
+            var v = getVideoElement();
+            var status = v ? (v.paused ? 'Duraklatıldı' : 'Oynatılıyor') : '';
+            var curTitleEl = document.querySelector(
+              'h1.video-info-name, .video-info-name h1, my-video-watch h1, .video-title, .title'
+            );
+            var curTitle = curTitleEl ? curTitleEl.textContent.trim() : videoTitle;
+            announce(
+              'Video oynatıcı seçildi: ' +
+                curTitle +
+                (status ? ' (' + status + ')' : '') +
+                '. Oynatmak için Boşluk veya K, sarmak için J veya L, ses için ok tuşlarını kullanabilirsiniz.'
+            );
+          });
+
+          // Keydown handler when player container is focused
+          playerWrapper.addEventListener('keydown', function (e) {
+            var video = getVideoElement();
+            if (!video) return;
+
+            // Space or K: Toggle Play/Pause
+            if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
+              e.preventDefault();
+              e.stopPropagation();
+              if (video.paused) {
+                video.play();
+                announce('Video oynatılıyor.');
+                showQuickToast('▶️ Oynatılıyor');
+              } else {
+                video.pause();
+                announce('Video duraklatıldı.');
+                showQuickToast('⏸️ Duraklatıldı');
+              }
+              return;
+            }
+
+            // Left Arrow or J: Rewind 10s
+            if (e.key === 'ArrowLeft' || e.key === 'j' || e.key === 'J') {
+              e.preventDefault();
+              e.stopPropagation();
+              video.currentTime = Math.max(0, video.currentTime - 10);
+              announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+              showQuickToast('⏪ -10sn');
+              return;
+            }
+
+            // Right Arrow or L: Forward 10s
+            if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
+              e.preventDefault();
+              e.stopPropagation();
+              video.currentTime = Math.min(video.duration || 999999, video.currentTime + 10);
+              announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+              showQuickToast('⏩ +10sn');
+              return;
+            }
+
+            // Up Arrow: Volume +5%
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              e.stopPropagation();
+              video.volume = Math.min(1, Math.round((video.volume + 0.05) * 100) / 100);
+              var pctUp = Math.round(video.volume * 100);
+              announce('Ses seviyesi yüzde ' + pctUp);
+              showQuickToast('🔊 Ses: %' + pctUp);
+              return;
+            }
+
+            // Down Arrow: Volume -5%
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              e.stopPropagation();
+              video.volume = Math.max(0, Math.round((video.volume - 0.05) * 100) / 100);
+              var pctDown = Math.round(video.volume * 100);
+              announce('Ses seviyesi yüzde ' + pctDown);
+              showQuickToast('🔉 Ses: %' + pctDown);
+              return;
+            }
+
+            // M: Mute toggle
+            if (e.key === 'm' || e.key === 'M') {
+              e.preventDefault();
+              e.stopPropagation();
+              video.muted = !video.muted;
+              announce(video.muted ? 'Ses kapatıldı (Sessiz).' : 'Ses açıldı.');
+              showQuickToast(video.muted ? '🔇 Sessiz' : '🔊 Ses Açık');
+              return;
+            }
+
+            // F: Fullscreen toggle
+            if (e.key === 'f' || e.key === 'F') {
+              e.preventDefault();
+              e.stopPropagation();
+              var pTarget = document.querySelector('#video-wrapper') || playerWrapper;
+              if (!document.fullscreenElement) {
+                if (pTarget.requestFullscreen) pTarget.requestFullscreen();
+                announce('Tam ekran moduna geçildi.');
+                showQuickToast('⛶ Tam Ekran');
+              } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+                announce('Tam ekrandan çıkıldı.');
+                showQuickToast('⛶ Normal Ekran');
+              }
+              return;
+            }
+
+            // T: Theater mode toggle
+            if (e.key === 't' || e.key === 'T') {
+              e.preventDefault();
+              e.stopPropagation();
+              document.body.classList.toggle('yaktube-theater-mode');
+              var isTheater = document.body.classList.contains('yaktube-theater-mode');
+              announce(isTheater ? 'Sinema modu açıldı.' : 'Sinema modundan çıkıldı.');
+              showQuickToast(isTheater ? '🎭 Sinema Modu' : '🎬 Normal Mod');
+              return;
+            }
+
+            // 0-9: Seek percent
+            if (/^[0-9]$/.test(e.key) && video.duration) {
+              e.preventDefault();
+              e.stopPropagation();
+              var pct = parseInt(e.key, 10) * 10;
+              video.currentTime = (video.duration * pct) / 100;
+              announce('Yüzde ' + pct + ' konumuna sarıldı. Konum: ' + formatTime(video.currentTime));
+              showQuickToast('📍 %' + pct);
+              return;
+            }
+
+            // Shift+N: Next Video
+            if (e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+              e.preventDefault();
+              e.stopPropagation();
+              var nextBtn = document.querySelector('.vjs-next-video-control, .vjs-next-control');
+              if (nextBtn) {
+                nextBtn.click();
+                announce('Sonraki videoya geçiliyor...');
+              }
+              return;
+            }
+
+            // Alt+H or ?: Shortcuts modal
+            if ((e.altKey && (e.key === 'h' || e.key === 'H')) || e.key === '?') {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleShortcutsModal();
+              return;
+            }
+          });
+        }
+
+        // Dynamic ARIA label updating with current title
+        var curAriaLabel =
+          'Video Oynatıcı: ' +
+          videoTitle +
+          '. Oynatmak için Boşluk veya K, sarmak için J veya L, ses seviyesi için Yukarı veya Aşağı ok tuşları, kısayol listesi için Alt+H tuşlarını kullanabilirsiniz.';
+        if (playerWrapper.getAttribute('aria-label') !== curAriaLabel) {
+          playerWrapper.setAttribute('aria-label', curAriaLabel);
+        }
+      }
+
+      // 5. Sanitize Unlocalized & Confusing Watch Page Controls
+      sanitizeWatchPageLabels(videoTitle);
+    }
+
     // 3.1. Injects Accessible Player Action Bar under the Watch Video
     function injectAccessiblePlayerBar() {
       if (!window.location.pathname.includes('/videos/watch/')) return;
@@ -1699,13 +2099,22 @@ try {
         '<button id="yaktube-bar-info-btn" class="yaktube-player-action-btn" aria-label="Video Bilgisi ve İstatistikleri (Alt+I)">📊 Bilgi</button>' +
         '<button id="yaktube-bar-help-btn" class="yaktube-player-action-btn" aria-label="Kısayol Kılavuzu (Alt+H veya F1)">⌨️ Kısayollar</button>';
 
-      var playerWrap =
-        document.querySelector('.player-container, .video-player-container, .player-wrapper, my-video-watch .player') ||
-        targetContainer;
-      if (playerWrap && playerWrap.nextSibling) {
-        playerWrap.parentNode.insertBefore(bar, playerWrap.nextSibling);
+      var playerWrap = document.querySelector(
+        '#video-wrapper, #videojs-wrapper, .player-container, .video-player-container, .player-wrapper, my-video-watch .player'
+      );
+      if (playerWrap && playerWrap.parentNode) {
+        if (playerWrap.nextSibling) {
+          playerWrap.parentNode.insertBefore(bar, playerWrap.nextSibling);
+        } else {
+          playerWrap.parentNode.appendChild(bar);
+        }
       } else {
-        targetContainer.prepend(bar);
+        var vBottom = document.querySelector('.video-bottom, .video-info');
+        if (vBottom && vBottom.parentNode) {
+          vBottom.parentNode.insertBefore(bar, vBottom);
+        } else {
+          targetContainer.prepend(bar);
+        }
       }
 
       // Attach button actions
@@ -1798,6 +2207,16 @@ try {
         if (isInputFocused()) {
           document.activeElement.blur();
         }
+        return;
+      }
+
+      // Jump to Video Player: Alt+P or Shift+P
+      if (
+        ((e.altKey && (e.key === 'p' || e.key === 'P')) || (e.shiftKey && (e.key === 'p' || e.key === 'P'))) &&
+        !isInputFocused()
+      ) {
+        e.preventDefault();
+        focusVideoPlayer();
         return;
       }
 
