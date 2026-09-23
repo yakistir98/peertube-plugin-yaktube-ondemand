@@ -2173,13 +2173,10 @@ try {
       bar.id = 'yaktube-player-action-bar';
       bar.className = 'yaktube-player-action-bar';
       bar.setAttribute('role', 'toolbar');
-      bar.setAttribute('aria-label', 'Erişilebilir Video Kontrolleri');
+      bar.setAttribute('aria-label', 'Video Araçları ve Ek Özellikler');
 
       bar.innerHTML =
-        '<span class="yaktube-player-bar-label">⚡ Oynatıcı Kontrolleri:</span>' +
-        '<button id="yaktube-bar-rewind-btn" class="yaktube-player-action-btn" aria-label="10 Saniye Geri Sar (Alt+J veya J)">⏪ 10sn Geri</button>' +
-        '<button id="yaktube-bar-play-btn" class="yaktube-player-action-btn" aria-label="Oynat veya Duraklat (Alt+K veya Boşluk)">⏯️ Oynat/Duraklat</button>' +
-        '<button id="yaktube-bar-forward-btn" class="yaktube-player-action-btn" aria-label="10 Saniye İleri Sar (Alt+L veya L)">⏩ 10sn İleri</button>' +
+        '<span class="yaktube-player-bar-label">🛠️ Video Araçları:</span>' +
         '<button id="yaktube-bar-speed-btn" class="yaktube-player-action-btn" aria-label="Oynatma Hızını Değiştir (Alt+.)">⚡ Hız</button>' +
         '<button id="yaktube-bar-sleep-btn" class="yaktube-player-action-btn" aria-label="Uyku Zamanlayıcısı (Alt+U)">⏱️ Uyku</button>' +
         '<button id="yaktube-bar-qr-btn" class="yaktube-player-action-btn" aria-label="Telefonda Devam Et / QR Kod (Alt+Q)">📱 Telefonda Aç</button>' +
@@ -2206,39 +2203,6 @@ try {
       }
 
       // Attach button actions
-      bar.querySelector('#yaktube-bar-rewind-btn').addEventListener('click', function () {
-        var video = getVideoElement();
-        if (video) {
-          video.currentTime = Math.max(0, video.currentTime - 10);
-          announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
-          showQuickToast('⏪ -10sn');
-        }
-      });
-
-      bar.querySelector('#yaktube-bar-play-btn').addEventListener('click', function () {
-        var video = getVideoElement();
-        if (video) {
-          if (video.paused) {
-            video.play();
-            announce('Video oynatılıyor.');
-            showQuickToast('▶️ Oynatılıyor');
-          } else {
-            video.pause();
-            announce('Video duraklatıldı.');
-            showQuickToast('⏸️ Duraklatıldı');
-          }
-        }
-      });
-
-      bar.querySelector('#yaktube-bar-forward-btn').addEventListener('click', function () {
-        var video = getVideoElement();
-        if (video) {
-          video.currentTime = Math.min(video.duration || 99999, video.currentTime + 10);
-          announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
-          showQuickToast('⏩ +10sn');
-        }
-      });
-
       bar.querySelector('#yaktube-bar-speed-btn').addEventListener('click', function () {
         adjustPlaybackSpeed(true);
       });
