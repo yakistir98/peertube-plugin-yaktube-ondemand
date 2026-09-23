@@ -1849,13 +1849,100 @@ try {
       }
     }
 
+    function isWatchUrl() {
+      if (typeof window === 'undefined' || !window.location) return false;
+      var p = window.location.pathname;
+      return p.includes('/videos/watch/') || p.startsWith('/w/') || p.includes('/w/');
+    }
+
+    function injectControlBarSeekButtons(playerWrapper) {
+      var controlBar = (playerWrapper || document).querySelector('.vjs-control-bar');
+      if (!controlBar) return;
+
+      var rewindBtn = controlBar.querySelector('.yaktube-vjs-rewind-btn');
+      var forwardBtn = controlBar.querySelector('.yaktube-vjs-forward-btn');
+      var playControl = controlBar.querySelector('.vjs-play-control');
+
+      if (!rewindBtn) {
+        rewindBtn = document.createElement('button');
+        rewindBtn.className = 'vjs-control vjs-button yaktube-vjs-seek-btn yaktube-vjs-rewind-btn';
+        rewindBtn.type = 'button';
+        rewindBtn.setAttribute('tabindex', '0');
+        rewindBtn.setAttribute('aria-label', '10 saniye geri sar (Sol Ok veya J)');
+        rewindBtn.setAttribute('title', '10 saniye geri sar (Alt+J)');
+        rewindBtn.innerHTML =
+          '<span class="yaktube-vjs-seek-icon" aria-hidden="true">⏪<span class="yaktube-vjs-seek-num">10</span></span>' +
+          '<span class="vjs-control-text" aria-live="polite">10 saniye geri sar</span>';
+
+        rewindBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var video = getVideoElement();
+          if (video) {
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+            showQuickToast('⏪ -10sn');
+          }
+        });
+
+        if (playControl && playControl.nextSibling) {
+          controlBar.insertBefore(rewindBtn, playControl.nextSibling);
+        } else {
+          controlBar.appendChild(rewindBtn);
+        }
+      }
+
+      if (!forwardBtn) {
+        forwardBtn = document.createElement('button');
+        forwardBtn.className = 'vjs-control vjs-button yaktube-vjs-seek-btn yaktube-vjs-forward-btn';
+        forwardBtn.type = 'button';
+        forwardBtn.setAttribute('tabindex', '0');
+        forwardBtn.setAttribute('aria-label', '10 saniye ileri sar (Sağ Ok veya L)');
+        forwardBtn.setAttribute('title', '10 saniye ileri sar (Alt+L)');
+        forwardBtn.innerHTML =
+          '<span class="yaktube-vjs-seek-icon" aria-hidden="true"><span class="yaktube-vjs-seek-num">10</span>⏩</span>' +
+          '<span class="vjs-control-text" aria-live="polite">10 saniye ileri sar</span>';
+
+        forwardBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var video = getVideoElement();
+          if (video) {
+            video.currentTime = Math.min(video.duration || 999999, video.currentTime + 10);
+            announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+            showQuickToast('⏩ +10sn');
+          }
+        });
+
+        if (rewindBtn && rewindBtn.nextSibling) {
+          controlBar.insertBefore(forwardBtn, rewindBtn.nextSibling);
+        } else if (playControl && playControl.nextSibling) {
+          controlBar.insertBefore(forwardBtn, playControl.nextSibling);
+        } else {
+          controlBar.appendChild(forwardBtn);
+        }
+      }
+    }
+
     function enhanceVideoPlayerAccessibility() {
-      var isWatchPage = window.location.pathname.includes('/videos/watch/');
+      var isWatch = isWatchUrl();
       var skipLink = document.getElementById('yaktube-skip-to-player');
 
-      if (!isWatchPage) {
+      if (!isWatch) {
         if (skipLink) skipLink.remove();
         return;
+      }
+
+      // 0. Handle Video Alert accessibility & live announcement (e.g. transcoding/playback warnings)
+      var alertEl = document.querySelector('my-video-alert, .video-alert, .alert-warning, .vjs-error-display');
+      if (alertEl && !alertEl.hasAttribute('data-yaktube-alert-handled')) {
+        alertEl.setAttribute('data-yaktube-alert-handled', 'true');
+        alertEl.setAttribute('role', 'alert');
+        alertEl.setAttribute('aria-live', 'assertive');
+        var alertText = alertEl.textContent ? alertEl.textContent.trim().replace(/\s+/g, ' ') : '';
+        if (alertText) {
+          announce('Video Uyarısı: ' + alertText, true);
+        }
       }
 
       // 1. Remove harmful role="application" from video and containers
@@ -2053,6 +2140,9 @@ try {
           });
         }
 
+        // 4.1. Inject 10s Rewind & Forward buttons directly into Video.js control bar (Phones & Desktop)
+        injectControlBarSeekButtons(playerWrapper);
+
         // Dynamic ARIA label updating with current title
         var curAriaLabel =
           'Video Oynatıcı: ' +
@@ -2069,12 +2159,10 @@ try {
 
     // 3.1. Injects Accessible Player Action Bar under the Watch Video
     function injectAccessiblePlayerBar() {
-      if (!window.location.pathname.includes('/videos/watch/')) return;
-      var video = getVideoElement();
-      if (!video) return;
+      if (!isWatchUrl()) return;
 
       var targetContainer = document.querySelector(
-        'my-video-watch, .video-watch, .watch-container, #yaktube-ondemand-container'
+        'my-video-watch, .video-watch, .watch-container, #yaktube-ondemand-container, .player-container, #video-wrapper, #videojs-wrapper'
       );
       if (!targetContainer) return;
 
@@ -2089,9 +2177,9 @@ try {
 
       bar.innerHTML =
         '<span class="yaktube-player-bar-label">⚡ Oynatıcı Kontrolleri:</span>' +
-        '<button id="yaktube-bar-rewind-btn" class="yaktube-player-action-btn" aria-label="10 Saniye Geri Sar (Alt+J)">⏪ 10sn Geri</button>' +
-        '<button id="yaktube-bar-play-btn" class="yaktube-player-action-btn" aria-label="Oynat veya Duraklat (Alt+K)">⏯️ Oynat/Duraklat</button>' +
-        '<button id="yaktube-bar-forward-btn" class="yaktube-player-action-btn" aria-label="10 Saniye İleri Sar (Alt+L)">⏩ 10sn İleri</button>' +
+        '<button id="yaktube-bar-rewind-btn" class="yaktube-player-action-btn" aria-label="10 Saniye Geri Sar (Alt+J veya J)">⏪ 10sn Geri</button>' +
+        '<button id="yaktube-bar-play-btn" class="yaktube-player-action-btn" aria-label="Oynat veya Duraklat (Alt+K veya Boşluk)">⏯️ Oynat/Duraklat</button>' +
+        '<button id="yaktube-bar-forward-btn" class="yaktube-player-action-btn" aria-label="10 Saniye İleri Sar (Alt+L veya L)">⏩ 10sn İleri</button>' +
         '<button id="yaktube-bar-speed-btn" class="yaktube-player-action-btn" aria-label="Oynatma Hızını Değiştir (Alt+.)">⚡ Hız</button>' +
         '<button id="yaktube-bar-sleep-btn" class="yaktube-player-action-btn" aria-label="Uyku Zamanlayıcısı (Alt+U)">⏱️ Uyku</button>' +
         '<button id="yaktube-bar-qr-btn" class="yaktube-player-action-btn" aria-label="Telefonda Devam Et / QR Kod (Alt+Q)">📱 Telefonda Aç</button>' +
@@ -2119,28 +2207,35 @@ try {
 
       // Attach button actions
       bar.querySelector('#yaktube-bar-rewind-btn').addEventListener('click', function () {
+        var video = getVideoElement();
         if (video) {
           video.currentTime = Math.max(0, video.currentTime - 10);
           announce('10 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
+          showQuickToast('⏪ -10sn');
         }
       });
 
       bar.querySelector('#yaktube-bar-play-btn').addEventListener('click', function () {
+        var video = getVideoElement();
         if (video) {
           if (video.paused) {
             video.play();
             announce('Video oynatılıyor.');
+            showQuickToast('▶️ Oynatılıyor');
           } else {
             video.pause();
             announce('Video duraklatıldı.');
+            showQuickToast('⏸️ Duraklatıldı');
           }
         }
       });
 
       bar.querySelector('#yaktube-bar-forward-btn').addEventListener('click', function () {
+        var video = getVideoElement();
         if (video) {
           video.currentTime = Math.min(video.duration || 99999, video.currentTime + 10);
           announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
+          showQuickToast('⏩ +10sn');
         }
       });
 

@@ -1481,3 +1481,82 @@ my-date-toggle .date-toggle:focus-visible {
   outline: 2px solid #ff8f37 !important;
   outline-offset: 1px !important;
 }
+
+/* 6. Video.js Native Control Bar 10s Seek Buttons (Mobile & Desktop) */
+.video-js .vjs-control-bar .yaktube-vjs-seek-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 44px !important;
+  height: 100% !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  cursor: pointer !important;
+  color: #f1f1f1 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  position: relative !important;
+  user-select: none !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 2px !important;
+  transition:
+    color 0.2s ease,
+    transform 0.15s ease !important;
+}
+
+.video-js .vjs-control-bar .yaktube-vjs-seek-btn:hover,
+.video-js .vjs-control-bar .yaktube-vjs-seek-btn:focus-visible {
+  color: #ff8f37 !important;
+  transform: scale(1.1) !important;
+  outline: 2px solid #ff8f37 !important;
+  outline-offset: -2px !important;
+}
+
+.video-js .vjs-control-bar .yaktube-vjs-seek-btn:active {
+  transform: scale(0.92) !important;
+}
+
+.yaktube-vjs-seek-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 1px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+
+.yaktube-vjs-seek-num {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif !important;
+  color: #ff8f37 !important;
+  margin-top: 1px !important;
+}
+
+/* 7. Mobile Watch Page & Action Bar Touch Optimizations */
+@media (max-width: 768px) {
+  .video-js .vjs-control-bar .yaktube-vjs-seek-btn {
+    width: 46px !important;
+    min-width: 46px !important;
+    font-size: 14px !important;
+  }
+  .yaktube-player-action-bar {
+    padding: 8px 10px !important;
+    gap: 6px !important;
+  }
+  .yaktube-player-action-btn {
+    padding: 9px 12px !important;
+    font-size: 12px !important;
+    flex: 1 1 calc(50% - 6px) !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+  }
+}
