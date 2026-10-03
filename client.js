@@ -2239,6 +2239,12 @@ try {
     // 4. Global Keydown Listener (Screen-Reader & Turkish Q Optimized)
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
+        var quotaModal = document.getElementById('yaktube-quota-modal');
+        if (quotaModal) {
+          quotaModal.remove();
+          announce('Kota uyarısı penceresi kapatıldı.');
+          return;
+        }
         var sleepModal = document.getElementById('yaktube-sleep-modal');
         if (sleepModal) {
           sleepModal.remove();
@@ -2865,85 +2871,314 @@ try {
       } catch (e) {}
     }
 
-    function handleImport(url, btn, videoTitle) {
-      btn.disabled = true;
-      btn.innerHTML = '⏳ Aktarılıyor...';
-      showModal(
-        '[1/2] 📥 Video İndiriliyor...',
-        (videoTitle ? '"' + videoTitle + '" ' : 'Video ') + "YouTube'dan sunucunuza aktarılıyor. Lütfen bekleyin..."
-      );
+    // --- Guest Video Import Quota & PeerTube Login Redirect Engine ---
+    var cachedGuestImportLimit = null;
 
-      fetch('/api-custom/ondemand-import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUrl: url, title: videoTitle })
-      })
-        .then(function (res) {
-          return res.json();
+    function fetchGuestImportLimit() {
+      if (cachedGuestImportLimit !== null) {
+        return Promise.resolve(cachedGuestImportLimit);
+      }
+      return fetch('/api-custom/quota-config')
+        .then(function (r) {
+          return r.json();
         })
-        .then(function (data) {
-          if (!data || !data.ok) {
-            throw new Error(data && data.error ? data.error : 'İçe aktarma başlatılamadı.');
+        .then(function (d) {
+          if (d && typeof d.guestImportLimit === 'number') {
+            cachedGuestImportLimit = d.guestImportLimit;
+            return cachedGuestImportLimit;
           }
+          return 5;
+        })
+        .catch(function () {
+          return fetch('/plugins/yaktube-ondemand/router/quota-config')
+            .then(function (r2) {
+              return r2.json();
+            })
+            .then(function (d2) {
+              if (d2 && typeof d2.guestImportLimit === 'number') {
+                cachedGuestImportLimit = d2.guestImportLimit;
+                return cachedGuestImportLimit;
+              }
+              return 5;
+            })
+            .catch(function () {
+              return 5;
+            });
+        });
+    }
 
-          var videoId = data.video.id;
-          var videoUuid = data.video.uuid;
+    // Pre-fetch guest import quota setting quietly on startup
+    setTimeout(function () {
+      fetchGuestImportLimit();
+    }, 600);
 
-          var attempts = 0;
-          var pollInterval = setInterval(function () {
-            attempts++;
-            fetch('/api-custom/status/' + videoId)
-              .then(function (sRes) {
-                return sRes.json();
-              })
-              .then(function (sData) {
-                if (sData.isImporting) {
-                  showModal('[1/2] 📥 Video İndiriliyor...', 'Video sunucuya indiriliyor (' + attempts * 2 + ' sn)...');
-                } else if (sData.isTranscoding) {
-                  showModal(
-                    '[2/2] ⚙️ Oynatıcı Hazırlanıyor...',
-                    'Video işleniyor ve yüksek kalite akış hazırlanıyor...'
-                  );
-                }
+    function getGuestImportCount() {
+      var lsCount = 0;
+      var cookieCount = 0;
+      try {
+        lsCount = parseInt(localStorage.getItem('yaktube_guest_import_count') || '0', 10);
+        if (isNaN(lsCount) || lsCount < 0) lsCount = 0;
+      } catch (e) {}
+      try {
+        var match = document.cookie.match(/(?:^|;\s*)yaktube_guest_imports=(\d+)/);
+        if (match && match[1]) {
+          cookieCount = parseInt(match[1], 10);
+          if (isNaN(cookieCount) || cookieCount < 0) cookieCount = 0;
+        }
+      } catch (e) {}
+      var maxCount = Math.max(lsCount, cookieCount);
+      // Keep localStorage and cookie synchronized so refreshing cannot reset it
+      if (maxCount > 0) {
+        try {
+          localStorage.setItem('yaktube_guest_import_count', String(maxCount));
+        } catch (e) {}
+        try {
+          document.cookie = 'yaktube_guest_imports=' + maxCount + '; path=/; max-age=31536000; SameSite=Lax';
+        } catch (e) {}
+      }
+      return maxCount;
+    }
 
-                if (sData.isPublished || (sData.hasFiles && attempts >= 8)) {
-                  clearInterval(pollInterval);
-                  showModal('🎉 Video Hazır!', 'Video kütüphanenize eklendi. Oynatıcı açılıyor...');
-                  setTimeout(function () {
-                    window.location.href = '/videos/watch/' + (sData.uuid || videoUuid);
-                  }, 600);
-                } else if (sData.isFailed) {
-                  clearInterval(pollInterval);
-                  hideModal();
-                  btn.disabled = false;
-                  btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
-                  alert('Video indirme sırasında bir hata oluştu.');
-                  announce('Video indirme sırasında bir hata oluştu.', true);
-                }
-              })
-              .catch(function (e) {
-                console.error('[YakTube] Status poll error:', e);
-              });
+    function incrementGuestImportCount() {
+      var nextCount = getGuestImportCount() + 1;
+      try {
+        localStorage.setItem('yaktube_guest_import_count', String(nextCount));
+      } catch (e) {}
+      try {
+        document.cookie = 'yaktube_guest_imports=' + nextCount + '; path=/; max-age=31536000; SameSite=Lax';
+      } catch (e) {}
+      return nextCount;
+    }
 
-            if (attempts > 35) {
-              clearInterval(pollInterval);
+    function redirectToPeerTubeLogin() {
+      try {
+        // Save current URL in sessionStorage just as PeerTube's LoginComponent does
+        sessionStorage.setItem('redirect-url-after-login', window.location.pathname + window.location.search);
+      } catch (e) {}
+
+      // 1. Check PeerTube's native login link in header (handles redirectOnSingleExternalAuth / YakNet SSO automatically)
+      var loginLink = document.querySelector(
+        'my-login-link a.login-button-link, my-login-link a[href], a.login-button-link'
+      );
+      if (loginLink) {
+        var href = loginLink.getAttribute('href');
+        if (href && href !== '#' && !href.startsWith('javascript:')) {
+          window.location.href = href;
+          return;
+        }
+        loginLink.click();
+        return;
+      }
+
+      // 2. Check window.PeertubeServerConfig for single external auth (PeerTube native getDefaultLoginHref logic)
+      try {
+        var cfg = window.PeertubeServerConfig;
+        if (
+          cfg &&
+          cfg.client &&
+          cfg.client.menu &&
+          cfg.client.menu.login &&
+          cfg.client.menu.login.redirectOnSingleExternalAuth === true &&
+          cfg.plugin &&
+          Array.isArray(cfg.plugin.registeredExternalAuths) &&
+          cfg.plugin.registeredExternalAuths.length === 1
+        ) {
+          var ext = cfg.plugin.registeredExternalAuths[0];
+          var npmName = ext.npmName || 'peertube-plugin-' + ext.name;
+          window.location.href = '/plugins/' + ext.name + '/' + ext.version + '/auth/' + ext.authName;
+          return;
+        }
+      } catch (e) {}
+
+      // 3. Standard PeerTube login route fallback
+      window.location.href = '/login';
+    }
+
+    function showQuotaExceededModal(limitVal) {
+      hideModal();
+      var existing = document.getElementById('yaktube-quota-modal');
+      if (existing) existing.remove();
+
+      var modal = document.createElement('div');
+      modal.id = 'yaktube-quota-modal';
+      modal.className = 'yaktube-modal-overlay';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'yaktube-quota-modal-title');
+      modal.setAttribute('aria-describedby', 'yaktube-quota-modal-desc');
+
+      var displayLimit = limitVal || cachedGuestImportLimit || getGuestImportCount() || 5;
+      var instanceName = escapeHtml(getInstanceName());
+
+      modal.innerHTML =
+        '<div class="yaktube-modal-box" style="max-width:440px; border: 2px solid #f97316;">' +
+        '<div style="font-size:42px; margin-bottom:8px;" aria-hidden="true">🔒</div>' +
+        '<h2 id="yaktube-quota-modal-title" class="yaktube-modal-title" style="margin-top:0; color:#ff8f37; font-size:22px;">Kota Doldu</h2>' +
+        '<div id="yaktube-quota-modal-desc" class="yaktube-modal-desc" style="font-size:14px; line-height:1.6; color:#e2e8f0; margin-bottom:20px;">' +
+        'Misafir kullanıcı olarak ücretsiz <strong>' +
+        displayLimit +
+        ' video</strong> indirme sınırına ulaştınız.<br><br>' +
+        'Sınırsız video aktarmaya ve izlemeye devam etmek için <strong>lütfen giriş yapın</strong>.' +
+        '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:10px;">' +
+        '<button type="button" id="yaktube-quota-login-btn" style="background:linear-gradient(135deg, #ff8f37 0%, #ea580c 100%); color:#000; font-weight:800; font-size:15px; padding:12px 20px; border:none; border-radius:10px; cursor:pointer; box-shadow: 0 4px 14px rgba(255,143,55,0.4);">🔑 Giriş Yap (' +
+        instanceName +
+        ')</button>' +
+        '<button type="button" id="yaktube-quota-close-btn" style="background:#1e293b; color:#cbd5e1; font-weight:600; font-size:13px; padding:10px 18px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; cursor:pointer;">Kapat</button>' +
+        '</div>' +
+        '</div>';
+
+      document.body.appendChild(modal);
+
+      var loginBtn = document.getElementById('yaktube-quota-login-btn');
+      var closeBtn = document.getElementById('yaktube-quota-close-btn');
+
+      if (loginBtn) {
+        loginBtn.addEventListener('click', function () {
+          modal.remove();
+          redirectToPeerTubeLogin();
+        });
+        setTimeout(function () {
+          loginBtn.focus();
+        }, 50);
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          modal.remove();
+          announce('Kota uyarısı kapatıldı.');
+        });
+      }
+
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+
+      announce('Kota Doldu. Misafir video indirme sınırına ulaştınız. Devam etmek için lütfen giriş yapın.', true);
+    }
+
+    function handleImport(url, btn, videoTitle) {
+      var loggedIn = isUserLoggedIn();
+      var currentGuestCount = getGuestImportCount();
+
+      fetchGuestImportLimit().then(function (limit) {
+        if (!loggedIn && limit > 0 && currentGuestCount >= limit) {
+          showQuotaExceededModal(limit);
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Aktarılıyor...';
+        showModal(
+          '[1/2] 📥 Video İndiriliyor...',
+          (videoTitle ? '"' + videoTitle + '" ' : 'Video ') + "YouTube'dan sunucunuza aktarılıyor. Lütfen bekleyin..."
+        );
+
+        var headers = { 'Content-Type': 'application/json' };
+        try {
+          var token = localStorage.getItem('access_token');
+          if (token) {
+            headers['Authorization'] = 'Bearer ' + token;
+          }
+        } catch (e) {}
+
+        fetch('/api-custom/ondemand-import', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            targetUrl: url,
+            title: videoTitle,
+            isAuthenticated: loggedIn,
+            guestImportCount: currentGuestCount
+          })
+        })
+          .then(function (res) {
+            return res.json();
+          })
+          .then(function (data) {
+            if (data && data.quotaExceeded) {
               hideModal();
               btn.disabled = false;
               btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
-              alert(
-                'İndirme arka planda tamamlanıyor. Ana sayfada veya Videolarım sayfasında kısa süre içinde hazır olacaktır.'
-              );
-              announce('İndirme arka planda tamamlanıyor. Ana sayfada kısa süre içinde hazır olacaktır.');
+              if (typeof data.limit === 'number' && data.limit > 0) {
+                cachedGuestImportLimit = data.limit;
+              }
+              showQuotaExceededModal(data.limit || limit);
+              return;
             }
-          }, 1500);
-        })
-        .catch(function (err) {
-          hideModal();
-          btn.disabled = false;
-          btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
-          alert('İndirme hatası: ' + err.message);
-          announce('İndirme hatası: ' + err.message, true);
-        });
+
+            if (!data || !data.ok) {
+              throw new Error(data && data.error ? data.error : 'İçe aktarma başlatılamadı.');
+            }
+
+            if (!loggedIn) {
+              incrementGuestImportCount();
+            }
+
+            var videoId = data.video.id;
+            var videoUuid = data.video.uuid;
+
+            var attempts = 0;
+            var pollInterval = setInterval(function () {
+              attempts++;
+              fetch('/api-custom/status/' + videoId)
+                .then(function (sRes) {
+                  return sRes.json();
+                })
+                .then(function (sData) {
+                  if (sData.isImporting) {
+                    showModal(
+                      '[1/2] 📥 Video İndiriliyor...',
+                      'Video sunucuya indiriliyor (' + attempts * 2 + ' sn)...'
+                    );
+                  } else if (sData.isTranscoding) {
+                    showModal(
+                      '[2/2] ⚙️ Oynatıcı Hazırlanıyor...',
+                      'Video işleniyor ve yüksek kalite akış hazırlanıyor...'
+                    );
+                  }
+
+                  if (sData.isPublished || (sData.hasFiles && attempts >= 8)) {
+                    clearInterval(pollInterval);
+                    showModal('🎉 Video Hazır!', 'Video kütüphanenize eklendi. Oynatıcı açılıyor...');
+                    setTimeout(function () {
+                      window.location.href = '/videos/watch/' + (sData.uuid || videoUuid);
+                    }, 600);
+                  } else if (sData.isFailed) {
+                    clearInterval(pollInterval);
+                    hideModal();
+                    btn.disabled = false;
+                    btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
+                    alert('Video indirme sırasında bir hata oluştu.');
+                    announce('Video indirme sırasında bir hata oluştu.', true);
+                  }
+                })
+                .catch(function (e) {
+                  console.error('[YakTube] Status poll error:', e);
+                });
+
+              if (attempts > 35) {
+                clearInterval(pollInterval);
+                hideModal();
+                btn.disabled = false;
+                btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
+                alert(
+                  'İndirme arka planda tamamlanıyor. Ana sayfada veya Videolarım sayfasında kısa süre içinde hazır olacaktır.'
+                );
+                announce('İndirme arka planda tamamlanıyor. Ana sayfada kısa süre içinde hazır olacaktır.');
+              }
+            }, 1500);
+          })
+          .catch(function (err) {
+            hideModal();
+            btn.disabled = false;
+            btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
+            alert('İndirme hatası: ' + err.message);
+            announce('İndirme hatası: ' + err.message, true);
+          });
+      });
     }
 
     function checkAndInjectSearchResults() {
@@ -3088,6 +3323,9 @@ try {
         .then(function (responses) {
           var ytData = responses[0] || {};
           var localData = responses[1] || {};
+          if (typeof ytData.guestImportLimit === 'number') {
+            cachedGuestImportLimit = ytData.guestImportLimit;
+          }
 
           var rawYtResults = ytData.results || [];
           var uniqueYtResults = [];
@@ -4359,6 +4597,9 @@ try {
           return res.json();
         })
         .then(function (data) {
+          if (data && typeof data.guestImportLimit === 'number') {
+            cachedGuestImportLimit = data.guestImportLimit;
+          }
           var rawResults = data.results || [];
           var normalizedCurrentTitle = rawTitle.toLowerCase().trim();
 

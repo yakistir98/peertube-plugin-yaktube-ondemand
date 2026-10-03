@@ -182,19 +182,55 @@ async function getAdminToken() {
   });
 }
 
-async function register({ getRouter, peertubeHelpers, logger }) {
+async function register({ getRouter, registerSetting, settingsManager, peertubeHelpers, logger }) {
   const router = getRouter();
   const ytdlpPath = resolveYtDlpPath(logger);
+
+  let guestImportLimit = 5;
+
+  if (typeof registerSetting === 'function') {
+    registerSetting({
+      name: 'guest-import-limit',
+      label: 'Misafir Video İndirme Sınırı (Kota)',
+      type: 'input',
+      description:
+        'Giriş yapmamış (misafir) kullanıcıların YouTube üzerinden sunucuya aktarabileceği maksimum video sayısı (Örn: 5). Sınır istemiyorsanız (sınırsız) 0 yazın.',
+      private: false,
+      default: '5'
+    });
+  }
+
+  async function loadPluginSettings() {
+    if (!settingsManager || typeof settingsManager.getSetting !== 'function') return;
+    try {
+      const val = await settingsManager.getSetting('guest-import-limit');
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        const parsed = parseInt(String(val).trim(), 10);
+        guestImportLimit = isNaN(parsed) || parsed < 0 ? 5 : parsed;
+      } else {
+        guestImportLimit = 5;
+      }
+    } catch (e) {}
+  }
+
+  await loadPluginSettings();
+  if (settingsManager && typeof settingsManager.onSettingsChange === 'function') {
+    settingsManager.onSettingsChange(loadPluginSettings);
+  }
+
+  router.get('/quota-config', (_req, res) => {
+    return res.json({ ok: true, guestImportLimit });
+  });
 
   router.get('/search', async (req, res) => {
     const query = (req.query.q || '').trim();
     if (!query || query.length < 2) {
-      return res.json({ results: [] });
+      return res.json({ results: [], guestImportLimit });
     }
 
     const cached = getCached(query);
     if (cached) {
-      return res.json({ results: cached, cached: true });
+      return res.json({ results: cached, cached: true, guestImportLimit });
     }
 
     const args = ['ytsearch6:' + query, '--dump-single-json', '--flat-playlist', '--skip-download', '--no-warnings'];
@@ -233,7 +269,7 @@ async function register({ getRouter, peertubeHelpers, logger }) {
           });
 
         setCache(query, results);
-        return res.json({ results, cached: false });
+        return res.json({ results, cached: false, guestImportLimit });
       } catch (parseErr) {
         if (logger) logger.error('JSON parse error in search: ' + parseErr.message);
         return res.status(500).json({ error: 'Failed to parse search results' });
@@ -242,9 +278,23 @@ async function register({ getRouter, peertubeHelpers, logger }) {
   });
 
   router.post('/import', async (req, res) => {
-    const { targetUrl, channelId, category } = req.body;
+    const { targetUrl, channelId, category, isAuthenticated, guestImportCount } = req.body;
     if (!targetUrl || (!targetUrl.includes('youtube.com') && !targetUrl.includes('youtu.be'))) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+
+    const authHeader = req.headers && req.headers.authorization;
+    const isLoggedUser = Boolean(isAuthenticated || (authHeader && authHeader.startsWith('Bearer ')));
+    if (!isLoggedUser && guestImportLimit > 0) {
+      const clientCount = parseInt(String(guestImportCount || '0'), 10) || 0;
+      if (clientCount >= guestImportLimit) {
+        return res.status(429).json({
+          ok: false,
+          quotaExceeded: true,
+          limit: guestImportLimit,
+          error: 'Kota Doldu: Lütfen devam etmek için giriş yapın.'
+        });
+      }
     }
 
     try {
