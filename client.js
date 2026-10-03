@@ -246,7 +246,53 @@ try {
       initSilentSSOProbe();
     }
 
+    function saveReturnUrlBeforeLogin() {
+      try {
+        var currentPath = window.location.pathname + window.location.search + window.location.hash;
+        if (currentPath && !window.location.pathname.includes('/login')) {
+          localStorage.setItem('yaktube_return_url', currentPath);
+          localStorage.setItem('yaktube_return_url_time', String(Date.now()));
+          sessionStorage.setItem('yaktube_return_url', currentPath);
+          sessionStorage.setItem('redirect-url-after-login', currentPath);
+        }
+      } catch (e) {}
+    }
+
+    function checkPendingPostLoginRedirect() {
+      try {
+        if (window.location.pathname.includes('/login')) return false;
+        var token = localStorage.getItem('access_token');
+        if (!token) return false;
+        var savedUrl =
+          localStorage.getItem('yaktube_return_url') ||
+          sessionStorage.getItem('yaktube_return_url') ||
+          sessionStorage.getItem('redirect-url-after-login');
+        if (!savedUrl) return false;
+        var savedTime = parseInt(localStorage.getItem('yaktube_return_url_time') || '0', 10);
+        localStorage.removeItem('yaktube_return_url');
+        localStorage.removeItem('yaktube_return_url_time');
+        sessionStorage.removeItem('yaktube_return_url');
+        sessionStorage.removeItem('redirect-url-after-login');
+        if (savedTime && Date.now() - savedTime > 15 * 60 * 1000) return false;
+        var currentFull = window.location.pathname + window.location.search + window.location.hash;
+        if (
+          typeof savedUrl === 'string' &&
+          savedUrl.startsWith('/') &&
+          !savedUrl.startsWith('//') &&
+          !savedUrl.startsWith('/login') &&
+          savedUrl !== currentFull
+        ) {
+          window.location.replace(savedUrl);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    checkPendingPostLoginRedirect();
+
     function triggerYakNetOAuth() {
+      saveReturnUrlBeforeLogin();
       sessionStorage.removeItem('yaknet_manual_logout');
       var callbackUrl = 'https://yaktube.yakhub.com.tr/plugins/peertube-plugin-auth-yaknet/router/auth-callback';
       window.location.href =
@@ -2966,10 +3012,7 @@ try {
     }
 
     function redirectToPeerTubeLogin() {
-      try {
-        // Save current URL in sessionStorage just as PeerTube's LoginComponent does
-        sessionStorage.setItem('redirect-url-after-login', window.location.pathname + window.location.search);
-      } catch (e) {}
+      saveReturnUrlBeforeLogin();
 
       // 1. Check PeerTube's native login link in header (handles redirectOnSingleExternalAuth / YakNet SSO automatically)
       var loginLink = document.querySelector(
@@ -5146,6 +5189,10 @@ try {
     // 10. Unified Debounced MutationObserver & Reactive SPA Engine (v1.5.0)
     var unifiedTimer = null;
     function runUnifiedCycle(isNav) {
+      try {
+        if (checkPendingPostLoginRedirect()) return;
+      } catch (e) {}
+
       try {
         autoFixDOM();
       } catch (e) {}
