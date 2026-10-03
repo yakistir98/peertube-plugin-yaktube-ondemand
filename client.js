@@ -4962,7 +4962,7 @@ try {
       apkBtn.id = 'yaktube-apk-download-btn';
       apkBtn.href = '/yaktube.apk';
       apkBtn.className = 'yaktube-apk-btn';
-      apkBtn.setAttribute('download', 'YakTube_Mobile_v1.0.apk');
+      apkBtn.setAttribute('download', 'YakTube.apk');
       apkBtn.setAttribute('aria-label', 'YakTube Android APK İndir (4.5 MB)');
       apkBtn.style.cssText =
         'background: #1e293b; color: #ff8f37; border: 1px solid #ff8f37; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 11px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.3);';
@@ -4996,7 +4996,7 @@ try {
       sidebarLink.id = 'yaktube-sidebar-apk-link';
       sidebarLink.href = '/yaktube.apk';
       sidebarLink.className = 'menu-link item-link';
-      sidebarLink.setAttribute('download', 'YakTube_Mobile_v1.0.apk');
+      sidebarLink.setAttribute('download', 'YakTube.apk');
       sidebarLink.setAttribute('aria-label', 'YakTube Android Uygulamasını İndir (4.5 MB)');
       sidebarLink.style.cssText =
         'display: flex; align-items: center; gap: 10px; padding: 10px 16px; margin: 8px 12px; background: rgba(255, 143, 55, 0.1); color: #ff8f37; border: 1px solid rgba(255, 143, 55, 0.3); border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none;';

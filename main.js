@@ -95,10 +95,13 @@ function postInnerTubeJSON(url, data) {
   });
 }
 
+let pruneIntervalTimer = null;
+
 async function register({ getRouter, registerSetting, settingsManager, peertubeHelpers, logger }) {
   const router = getRouter();
 
   let guestImportLimit = 5;
+  let maxDiskUsagePercent = 85;
   let customChannelId = '';
   let customYtDlpPath = '';
 
@@ -111,6 +114,16 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
         'Giriş yapmamış (misafir) kullanıcıların YouTube üzerinden sunucuya aktarabileceği maksimum video sayısı (Örn: 5). Sınır istemiyorsanız (sınırsız) 0 yazın.',
       private: false,
       default: '5'
+    });
+
+    registerSetting({
+      name: 'max-disk-usage-percent',
+      label: 'Otomatik Disk Temizleme Sınırı (%)',
+      type: 'input',
+      description:
+        'Sunucu diski bu doluluk yüzdesine (Örn: 85) ulaştığında, en eski ve en az izlenen videolar otomatik olarak silinerek yer açılır. Otomatik silmeyi kapatmak için 0 yazın.',
+      private: false,
+      default: '85'
     });
 
     registerSetting({
@@ -143,6 +156,16 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
         guestImportLimit = isNaN(parsed) || parsed < 0 ? 5 : parsed;
       } else {
         guestImportLimit = 5;
+      }
+    } catch (e) {}
+
+    try {
+      const diskVal = await settingsManager.getSetting('max-disk-usage-percent');
+      if (diskVal !== undefined && diskVal !== null && String(diskVal).trim() !== '') {
+        const parsedDisk = parseInt(String(diskVal).trim(), 10);
+        maxDiskUsagePercent = isNaN(parsedDisk) || parsedDisk < 0 ? 85 : Math.min(99, parsedDisk);
+      } else {
+        maxDiskUsagePercent = 85;
       }
     } catch (e) {}
 
@@ -404,10 +427,178 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
     }
   }
 
-  // 1. Quota Config Route
+  // Universal Disk Storage & Auto-Pruner (Works on ANY PeerTube server without bridge.js)
+  const MIN_FREE_GB = 25;
+  const MIN_VIDEO_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function getStorageCheckPath() {
+    try {
+      if (
+        peertubeHelpers &&
+        peertubeHelpers.plugin &&
+        typeof peertubeHelpers.plugin.getDataDirectoryPath === 'function'
+      ) {
+        let dir = peertubeHelpers.plugin.getDataDirectoryPath();
+        while (dir && dir !== path.dirname(dir)) {
+          if (fs.existsSync(dir)) return dir;
+          dir = path.dirname(dir);
+        }
+      }
+    } catch (e) {}
+    if (process.platform === 'win32' && fs.existsSync('D:\\yaktube_storage')) {
+      return 'D:\\';
+    }
+    return process.cwd();
+  }
+
+  async function getStorageStats() {
+    await loadPluginSettings();
+    const checkPath = getStorageCheckPath();
+    return new Promise((resolve, reject) => {
+      fs.statfs(checkPath, (err, stats) => {
+        if (err) return reject(err);
+        const totalBytes = stats.blocks * stats.bsize;
+        const freeBytes = stats.bfree * stats.bsize;
+        const usedBytes = totalBytes - freeBytes;
+        const totalGB = totalBytes / (1024 * 1024 * 1024);
+        const freeGB = freeBytes / (1024 * 1024 * 1024);
+        const usedGB = usedBytes / (1024 * 1024 * 1024);
+        const usedPercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+        const isLowSpace = maxDiskUsagePercent > 0 && (usedPercent >= maxDiskUsagePercent || freeGB < MIN_FREE_GB);
+        resolve({
+          totalBytes,
+          freeBytes,
+          usedBytes,
+          totalGB: Number(totalGB.toFixed(2)),
+          freeGB: Number(freeGB.toFixed(2)),
+          usedGB: Number(usedGB.toFixed(2)),
+          usedPercent: Number(usedPercent.toFixed(1)),
+          maxDiskUsagePercent,
+          isLowSpace
+        });
+      });
+    });
+  }
+
+  async function checkAndPruneStorage() {
+    try {
+      let stats = await getStorageStats();
+      if (maxDiskUsagePercent <= 0) {
+        return { pruned: 0, freedGB: 0, status: 'Auto-pruning disabled (max-disk-usage-percent = 0)' };
+      }
+      if (!stats.isLowSpace) {
+        return {
+          pruned: 0,
+          freedGB: 0,
+          status: `Disk space healthy (${stats.freeGB} GB free, ${stats.usedPercent}% used, limit: ${maxDiskUsagePercent}%)`
+        };
+      }
+
+      const targetPercent = Math.max(10, maxDiskUsagePercent - 10);
+      if (logger) {
+        logger.info(
+          `[YakTube Auto-Pruner] Low disk space detected! Used: ${stats.usedPercent}% (Limit: ${maxDiskUsagePercent}%), Free: ${stats.freeGB} GB. Starting cleanup...`
+        );
+      }
+
+      const token = await getAdminToken();
+      const { hostname, port, hostHeader } = getLocalServerTarget();
+      const vids = await dbQuery(
+        `SELECT id, uuid, name, views, "createdAt"
+         FROM "video"
+         WHERE remote = false
+         ORDER BY views ASC, "createdAt" ASC
+         LIMIT 100`
+      );
+
+      const now = Date.now();
+      let prunedCount = 0;
+
+      for (const vid of vids) {
+        const createdAt = new Date(vid.createdAt).getTime();
+        if (now - createdAt < MIN_VIDEO_AGE_MS) {
+          continue;
+        }
+
+        if (logger) {
+          logger.info(`[YakTube Auto-Pruner] Pruning unused video: "${vid.name}" (ID: ${vid.id}, Views: ${vid.views})`);
+        }
+
+        await new Promise(resolve => {
+          const delReq = http.request(
+            {
+              hostname,
+              port,
+              path: '/api/v1/videos/' + vid.id,
+              method: 'DELETE',
+              headers: {
+                Host: hostHeader,
+                Authorization: 'Bearer ' + token
+              }
+            },
+            delRes => {
+              delRes.on('data', () => {});
+              delRes.on('end', resolve);
+            }
+          );
+          delReq.on('error', resolve);
+          delReq.end();
+        });
+
+        prunedCount++;
+        stats = await getStorageStats();
+        if (stats.usedPercent <= targetPercent && stats.freeGB >= MIN_FREE_GB) {
+          if (logger) {
+            logger.info(
+              `[YakTube Auto-Pruner] Target disk space reached (${stats.usedPercent}% used). Pruning completed.`
+            );
+          }
+          break;
+        }
+      }
+
+      return { pruned: prunedCount, status: 'Pruning completed', currentStats: stats };
+    } catch (err) {
+      if (logger) logger.error('[YakTube Auto-Pruner] Error during prune check: ' + err.message);
+      return { error: err.message };
+    }
+  }
+
+  if (pruneIntervalTimer) clearInterval(pruneIntervalTimer);
+  pruneIntervalTimer = setInterval(
+    () => {
+      checkAndPruneStorage().catch(() => {});
+    },
+    4 * 60 * 60 * 1000
+  );
+
+  // 1. Quota & Storage Config Routes
   router.get('/quota-config', async (_req, res) => {
     await loadPluginSettings();
-    return res.json({ ok: true, guestImportLimit });
+    return res.json({ ok: true, guestImportLimit, maxDiskUsagePercent });
+  });
+
+  router.get('/storage-status', async (_req, res) => {
+    try {
+      const stats = await getStorageStats();
+      return res.json({
+        ok: true,
+        stats,
+        policy: {
+          maxUsagePercent: maxDiskUsagePercent,
+          targetUsagePercent: maxDiskUsagePercent > 0 ? Math.max(10, maxDiskUsagePercent - 10) : 0,
+          minFreeGB: MIN_FREE_GB,
+          gracePeriodDays: 7
+        }
+      });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.post('/prune-check', async (_req, res) => {
+    const result = await checkAndPruneStorage();
+    return res.json(result);
   });
 
   // 2. YouTube Search Route (aliases: /youtube-search and /search)
@@ -503,6 +694,9 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
         });
       }
     }
+
+    // Non-blocking background check to prune old videos if disk usage exceeds maxDiskUsagePercent
+    checkAndPruneStorage().catch(() => {});
 
     try {
       const token = await getAdminToken();
@@ -863,7 +1057,12 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
   });
 }
 
-async function unregister() {}
+async function unregister() {
+  if (pruneIntervalTimer) {
+    clearInterval(pruneIntervalTimer);
+    pruneIntervalTimer = null;
+  }
+}
 
 module.exports = {
   register,
