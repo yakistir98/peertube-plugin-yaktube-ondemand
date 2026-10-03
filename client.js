@@ -2772,14 +2772,9 @@ try {
           moreCommentsBtn.textContent = '⏳ Y\u00fckleniyor...';
         }
 
-        var fetchUrl =
-          '/api-custom/youtube-comments?id=' +
-          encodeURIComponent(videoId) +
-          (token ? '&token=' + encodeURIComponent(token) : '');
-        fetch(fetchUrl)
-          .then(function (r) {
-            return r.json();
-          })
+        var commentPath =
+          '/youtube-comments?id=' + encodeURIComponent(videoId) + (token ? '&token=' + encodeURIComponent(token) : '');
+        fetchPluginJson(commentPath)
           .then(function (res) {
             if (!token) {
               commentsList.innerHTML = '';
@@ -2871,6 +2866,42 @@ try {
       } catch (e) {}
     }
 
+    // --- Universal Plugin API Fetcher (Works on ALL PeerTube instances via /plugins/yaktube-ondemand/router/... without needing bridge.js) ---
+    var preferredApiPrefix = null;
+
+    function fetchPluginJson(endpointPath, options) {
+      var cleanPath = endpointPath.indexOf('/') === 0 ? endpointPath : '/' + endpointPath;
+      var pluginUrl = '/plugins/yaktube-ondemand/router' + cleanPath;
+      var customUrl = '/api-custom' + cleanPath;
+
+      if (!preferredApiPrefix) {
+        preferredApiPrefix = isOfficialYakTubeServer() ? '/api-custom' : '/plugins/yaktube-ondemand/router';
+      }
+
+      var primaryUrl = preferredApiPrefix + cleanPath;
+      var fallbackUrl = primaryUrl === customUrl ? pluginUrl : customUrl;
+
+      return fetch(primaryUrl, options)
+        .then(function (res) {
+          var ct = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
+          if (ct.indexOf('application/json') !== -1) {
+            return res.json();
+          }
+          throw new Error('Non-JSON response');
+        })
+        .catch(function (err) {
+          if (err && err.name === 'AbortError') throw err;
+          return fetch(fallbackUrl, options).then(function (res2) {
+            var ct2 = (res2.headers && res2.headers.get && res2.headers.get('content-type')) || '';
+            if (ct2.indexOf('application/json') !== -1) {
+              preferredApiPrefix = fallbackUrl === pluginUrl ? '/plugins/yaktube-ondemand/router' : '/api-custom';
+              return res2.json();
+            }
+            throw new Error('Backend endpoint unreachable');
+          });
+        });
+    }
+
     // --- Guest Video Import Quota & PeerTube Login Redirect Engine ---
     var cachedGuestImportLimit = null;
 
@@ -2878,10 +2909,7 @@ try {
       if (cachedGuestImportLimit !== null) {
         return Promise.resolve(cachedGuestImportLimit);
       }
-      return fetch('/api-custom/quota-config')
-        .then(function (r) {
-          return r.json();
-        })
+      return fetchPluginJson('/quota-config')
         .then(function (d) {
           if (d && typeof d.guestImportLimit === 'number') {
             cachedGuestImportLimit = d.guestImportLimit;
@@ -2890,20 +2918,7 @@ try {
           return 5;
         })
         .catch(function () {
-          return fetch('/plugins/yaktube-ondemand/router/quota-config')
-            .then(function (r2) {
-              return r2.json();
-            })
-            .then(function (d2) {
-              if (d2 && typeof d2.guestImportLimit === 'number') {
-                cachedGuestImportLimit = d2.guestImportLimit;
-                return cachedGuestImportLimit;
-              }
-              return 5;
-            })
-            .catch(function () {
-              return 5;
-            });
+          return 5;
         });
     }
 
@@ -2984,7 +2999,6 @@ try {
           cfg.plugin.registeredExternalAuths.length === 1
         ) {
           var ext = cfg.plugin.registeredExternalAuths[0];
-          var npmName = ext.npmName || 'peertube-plugin-' + ext.name;
           window.location.href = '/plugins/' + ext.name + '/' + ext.version + '/auth/' + ext.authName;
           return;
         }
@@ -3084,7 +3098,7 @@ try {
           }
         } catch (e) {}
 
-        fetch('/api-custom/ondemand-import', {
+        fetchPluginJson('/ondemand-import', {
           method: 'POST',
           headers: headers,
           body: JSON.stringify({
@@ -3094,9 +3108,6 @@ try {
             guestImportCount: currentGuestCount
           })
         })
-          .then(function (res) {
-            return res.json();
-          })
           .then(function (data) {
             if (data && data.quotaExceeded) {
               hideModal();
@@ -3123,10 +3134,7 @@ try {
             var attempts = 0;
             var pollInterval = setInterval(function () {
               attempts++;
-              fetch('/api-custom/status/' + videoId)
-                .then(function (sRes) {
-                  return sRes.json();
-                })
+              fetchPluginJson('/status/' + videoId)
                 .then(function (sData) {
                   if (sData.isImporting) {
                     showModal(
@@ -3301,15 +3309,11 @@ try {
       var fetchOpts = abortCtrl ? { signal: abortCtrl.signal } : {};
 
       Promise.all([
-        fetch('/api-custom/youtube-search?q=' + encodeURIComponent(query), fetchOpts)
-          .then(function (res) {
-            return res.json();
-          })
-          .catch(function (err) {
-            if (err && err.name === 'AbortError') return { results: [] };
-            console.warn('[YakTube] YouTube search fetch error:', err);
-            return { results: [] };
-          }),
+        fetchPluginJson('/youtube-search?q=' + encodeURIComponent(query), fetchOpts).catch(function (err) {
+          if (err && err.name === 'AbortError') return { results: [] };
+          console.warn('[YakTube] YouTube search fetch error:', err);
+          return { results: [] };
+        }),
         fetch('/api/v1/search/videos?search=' + encodeURIComponent(query) + '&isLocal=true&count=12', fetchOpts)
           .then(function (res) {
             return res.json();
@@ -3712,7 +3716,7 @@ try {
       if (username) headers['X-User-Username'] = username;
 
       var authUrl = 'https://developer-console.yakhub.com.tr/api/yaktube/search-history' + (queryParams || '');
-      var bridgeUrl = '/api-custom/search-history' + (queryParams || '');
+      var historyPath = '/search-history' + (queryParams || '');
 
       var options = {
         method: method,
@@ -3720,6 +3724,17 @@ try {
         credentials: 'include'
       };
       if (body) options.body = JSON.stringify(body);
+
+      if (!isOfficialYakTubeServer()) {
+        fetchPluginJson(historyPath, options)
+          .then(function (data) {
+            if (typeof onSuccess === 'function') onSuccess(data);
+          })
+          .catch(function (e) {
+            if (typeof onError === 'function') onError(e);
+          });
+        return;
+      }
 
       fetch(authUrl, options)
         .then(function (res) {
@@ -3730,11 +3745,7 @@ try {
           if (typeof onSuccess === 'function') onSuccess(data);
         })
         .catch(function () {
-          // Fallback to local PeerTube bridge proxy
-          fetch(bridgeUrl, options)
-            .then(function (res) {
-              return res.json();
-            })
+          fetchPluginJson(historyPath, options)
             .then(function (data) {
               if (typeof onSuccess === 'function') onSuccess(data);
             })
@@ -4592,10 +4603,7 @@ try {
 
       announce(searchQuery + ' için ilgili video önerileri yükleniyor.');
 
-      fetch('/api-custom/youtube-search?q=' + encodeURIComponent(searchQuery))
-        .then(function (res) {
-          return res.json();
-        })
+      fetchPluginJson('/youtube-search?q=' + encodeURIComponent(searchQuery))
         .then(function (data) {
           if (data && typeof data.guestImportLimit === 'number') {
             cachedGuestImportLimit = data.guestImportLimit;
@@ -4673,10 +4681,7 @@ try {
         document.querySelector('my-video-comments, .video-comments, my-video-watch, .video-bottom') || document.body;
       if (!mountTarget) return;
 
-      fetch('/api-custom/video-origin/' + encodeURIComponent(uuid))
-        .then(function (r) {
-          return r.json();
-        })
+      fetchPluginJson('/video-origin/' + encodeURIComponent(uuid))
         .then(function (originData) {
           if (!originData || !originData.ok || !originData.hasYouTubeOrigin || !originData.youtubeId) {
             var old = document.getElementById('yaktube-watch-comments-panel');
@@ -4742,14 +4747,11 @@ try {
               moreBtn.textContent = '⏳ Y\u00fckleniyor...';
             }
 
-            var fUrl =
-              '/api-custom/youtube-comments?id=' +
+            var fPath =
+              '/youtube-comments?id=' +
               encodeURIComponent(youtubeId) +
               (token ? '&token=' + encodeURIComponent(token) : '');
-            fetch(fUrl)
-              .then(function (r) {
-                return r.json();
-              })
+            fetchPluginJson(fPath)
               .then(function (res) {
                 if (!token) {
                   listContainer.innerHTML = '';
