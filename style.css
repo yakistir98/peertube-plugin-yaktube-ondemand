@@ -1527,7 +1527,8 @@ my-date-toggle .date-toggle:focus-visible {
   line-height: 1 !important;
 }
 
-.yaktube-vjs-seek-num {
+.yaktube-vjs-seek-num,
+.yaktube-vjs-speed-val {
   font-size: 10px !important;
   font-weight: 800 !important;
   font-family:

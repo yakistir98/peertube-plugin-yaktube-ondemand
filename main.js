@@ -838,18 +838,38 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
   });
 
   // 6. Video YouTube Origin Detection Route
+  const BASE58_ALPHABET = '123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
+  function shortToUuid(shortStr) {
+    if (!shortStr || typeof shortStr !== 'string' || shortStr.length < 20 || shortStr.length > 24) return shortStr;
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(shortStr)) return shortStr;
+    try {
+      let num = 0n;
+      for (let i = 0; i < shortStr.length; i++) {
+        const idx = BASE58_ALPHABET.indexOf(shortStr[i]);
+        if (idx === -1) return shortStr;
+        num = num * 58n + BigInt(idx);
+      }
+      const hex = num.toString(16).padStart(32, '0');
+      if (hex.length !== 32) return shortStr;
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+    } catch (e) {
+      return shortStr;
+    }
+  }
+
   router.get('/video-origin/:uuid', async (req, res) => {
-    const uuid = (req.params.uuid || '').trim();
-    if (!uuid) return res.status(400).json({ error: 'UUID required' });
+    const rawParam = (req.params.uuid || '').trim();
+    if (!rawParam) return res.status(400).json({ error: 'UUID required' });
+    const resolvedUuid = shortToUuid(rawParam);
 
     try {
       const rows = await dbQuery(
         `SELECT v.id, v.uuid, v.name, v.description, vi."targetUrl"
          FROM "video" v
          LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
-         WHERE v.uuid::text = $1 OR v."shortUUID" = $1 OR v.id::text = $1
+         WHERE v.uuid::text = $1 OR v.id::text = $2
          LIMIT 1`,
-        [uuid]
+        [resolvedUuid, rawParam]
       );
       if (rows.length === 0) {
         return res.status(404).json({ error: 'Video not found' });

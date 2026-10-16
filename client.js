@@ -1231,10 +1231,12 @@ try {
       var toast = document.createElement('div');
       toast.id = 'yaktube-quick-toast';
       toast.className = 'yaktube-quick-toast';
+      var isEmbed = (typeof isEmbedUrl === 'function' && isEmbedUrl()) || (window.self !== window.top);
+      var toastTop = isEmbed ? '28px' : '80px';
       toast.style.cssText =
-        'position:fixed!important;top:80px!important;left:50%!important;transform:translateX(-50%)!important;' +
+        'position:fixed!important;top:' + toastTop + '!important;left:50%!important;transform:translateX(-50%)!important;' +
         'background:rgba(24,24,31,0.92)!important;border:1px solid #ff8f37!important;color:#fff!important;' +
-        'padding:10px 22px!important;border-radius:30px!important;font-size:14px!important;font-weight:700!important;' +
+        'padding:8px 18px!important;border-radius:30px!important;font-size:13px!important;font-weight:700!important;' +
         'box-shadow:0 10px 30px rgba(0,0,0,0.8)!important;z-index:999999!important;pointer-events:none!important;' +
         'backdrop-filter:blur(8px)!important;display:flex!important;align-items:center!important;gap:8px!important;';
       toast.innerHTML = (icon ? '<span>' + icon + '</span> ' : '') + '<span>' + message + '</span>';
@@ -1738,14 +1740,19 @@ try {
     // YAKTUBE ACCESSIBLE VIDEO PLAYER & WATCH PAGE ENGINE (W3C WAI-ARIA)
     // ==========================================================================
     function focusVideoPlayer() {
-      var playerWrapper = document.getElementById('videojs-wrapper') || document.querySelector('.video-js');
+      var playerWrapper =
+        document.getElementById('videojs-wrapper') ||
+        document.querySelector('.video-js') ||
+        document.getElementById('video-wrapper');
       if (playerWrapper) {
         playerWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
         playerWrapper.focus();
         var titleEl = document.querySelector(
           'h1.video-info-name, .video-info-name h1, my-video-watch h1, .video-title, .title'
         );
-        var videoTitle = titleEl ? titleEl.textContent.trim() : 'Video';
+        var videoTitle = titleEl
+          ? titleEl.textContent.trim()
+          : (document.title ? document.title.replace(/\s*-\s*(PeerTube|YakTube).*$/i, '').trim() : 'Video');
         var video = getVideoElement();
         var status = video ? (video.paused ? 'Duraklatıldı' : 'Oynatılıyor') : '';
         announce(
@@ -1895,10 +1902,21 @@ try {
       }
     }
 
+    function isEmbedUrl() {
+      if (typeof window === 'undefined' || !window.location) return false;
+      var p = window.location.pathname;
+      return p.includes('/videos/embed/') || p.startsWith('/videos/embed/');
+    }
+
     function isWatchUrl() {
       if (typeof window === 'undefined' || !window.location) return false;
       var p = window.location.pathname;
-      return p.includes('/videos/watch/') || p.startsWith('/w/') || p.includes('/w/');
+      return (
+        p.includes('/videos/watch/') ||
+        p.startsWith('/w/') ||
+        p.includes('/w/') ||
+        isEmbedUrl()
+      );
     }
 
     function injectControlBarSeekButtons(playerWrapper) {
@@ -1907,6 +1925,7 @@ try {
 
       var rewindBtn = controlBar.querySelector('.yaktube-vjs-rewind-btn');
       var forwardBtn = controlBar.querySelector('.yaktube-vjs-forward-btn');
+      var speedBtn = controlBar.querySelector('.yaktube-vjs-speed-btn');
       var playControl = controlBar.querySelector('.vjs-play-control');
 
       if (!rewindBtn) {
@@ -1968,6 +1987,55 @@ try {
           controlBar.appendChild(forwardBtn);
         }
       }
+
+      if (!speedBtn) {
+        speedBtn = document.createElement('button');
+        speedBtn.className = 'vjs-control vjs-button yaktube-vjs-seek-btn yaktube-vjs-speed-btn';
+        speedBtn.type = 'button';
+        speedBtn.setAttribute('tabindex', '0');
+        speedBtn.setAttribute('aria-label', 'Oynatma Hızı: 1x (Değiştirmek için tıklayın veya Alt+.)');
+        speedBtn.setAttribute('title', 'Hız: 1x (Alt+.)');
+        speedBtn.innerHTML =
+          '<span class="yaktube-vjs-seek-icon" aria-hidden="true">⚡<span class="yaktube-vjs-speed-val">1x</span></span>' +
+          '<span class="vjs-control-text" aria-live="polite">Hız Değiştir</span>';
+
+        speedBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var video = getVideoElement();
+          if (video) {
+            var speeds = [1, 1.25, 1.5, 1.75, 2, 0.5, 0.75];
+            var cur = video.playbackRate || 1;
+            var curIdx = speeds.indexOf(cur);
+            var nextSpeed = curIdx === -1 ? 1 : speeds[(curIdx + 1) % speeds.length];
+            video.playbackRate = nextSpeed;
+            var speedText = nextSpeed + 'x';
+            var numEl = speedBtn.querySelector('.yaktube-vjs-speed-val');
+            if (numEl) numEl.textContent = speedText;
+            speedBtn.setAttribute('aria-label', 'Oynatma Hızı: ' + speedText);
+            speedBtn.setAttribute('title', 'Hız: ' + speedText + ' (Alt+.)');
+            announce('Oynatma hızı: ' + speedText);
+            showQuickToast('⚡ Hız: ' + speedText);
+          }
+        });
+
+        if (forwardBtn && forwardBtn.nextSibling) {
+          controlBar.insertBefore(speedBtn, forwardBtn.nextSibling);
+        } else {
+          controlBar.appendChild(speedBtn);
+        }
+      } else {
+        var v = getVideoElement();
+        if (v) {
+          var curRate = (v.playbackRate || 1) + 'x';
+          var numEl = speedBtn.querySelector('.yaktube-vjs-speed-val');
+          if (numEl && numEl.textContent !== curRate) {
+            numEl.textContent = curRate;
+            speedBtn.setAttribute('aria-label', 'Oynatma Hızı: ' + curRate);
+            speedBtn.setAttribute('title', 'Hız: ' + curRate + ' (Alt+.)');
+          }
+        }
+      }
     }
 
     function enhanceVideoPlayerAccessibility() {
@@ -2010,10 +2078,12 @@ try {
       var titleEl = document.querySelector(
         'h1.video-info-name, .video-info-name h1, my-video-watch h1, .video-title, .title'
       );
-      var videoTitle = titleEl ? titleEl.textContent.trim() : 'Video';
+      var videoTitle = titleEl
+        ? titleEl.textContent.trim()
+        : (document.title ? document.title.replace(/\s*-\s*(PeerTube|YakTube).*$/i, '').trim() : 'Video');
 
       // 3. Setup Top-Level Skip Link: "🎬 Video Oynatıcıya Atla (Alt+P)"
-      if (!skipLink) {
+      if (!skipLink && !isEmbedUrl()) {
         skipLink = document.createElement('a');
         skipLink.id = 'yaktube-skip-to-player';
         skipLink.className = 'yaktube-skip-link';
@@ -2027,8 +2097,11 @@ try {
         document.body.insertBefore(skipLink, document.body.firstChild);
       }
 
-      // 4. Configure Player Container (#videojs-wrapper or .video-js)
-      var playerWrapper = document.getElementById('videojs-wrapper') || document.querySelector('.video-js');
+      // 4. Configure Player Container (#videojs-wrapper or .video-js or #video-wrapper)
+      var playerWrapper =
+        document.getElementById('videojs-wrapper') ||
+        document.querySelector('.video-js') ||
+        document.getElementById('video-wrapper');
       if (playerWrapper) {
         if (!playerWrapper.hasAttribute('data-yaktube-a11y-enhanced')) {
           playerWrapper.setAttribute('data-yaktube-a11y-enhanced', 'true');
@@ -2206,6 +2279,7 @@ try {
     // 3.1. Injects Accessible Player Action Bar under the Watch Video
     function injectAccessiblePlayerBar() {
       if (!isWatchUrl()) return;
+      if (isEmbedUrl()) return;
 
       var targetContainer = document.querySelector(
         'my-video-watch, .video-watch, .watch-container, #yaktube-ondemand-container, .player-container, #video-wrapper, #videojs-wrapper'
@@ -5315,9 +5389,3 @@ try {
 } catch (err) {
   console.error('[YakTube] Safe catch error:', err);
 }
-
-export async function register(options) {
-  return true;
-}
-export { register as registerClient };
-export default register;
