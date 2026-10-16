@@ -176,7 +176,7 @@ try {
       document.head.appendChild(s);
     }
 
-    // Intercept and sanitize YakNet Account Web Component popup menu
+    // Intercept and sanitize YakNet Account Web Component popup menu (v1.5.12)
     function hookYakNetAccountComponent() {
       if (typeof customElements === 'undefined') return;
       customElements
@@ -192,17 +192,48 @@ try {
               try {
                 if (this.shadowRoot) {
                   var isOfficial = isOfficialYakTubeServer();
+
                   // 1. In YakTube: Suppress redundant/recursive link to YakTube inside services list
-                  var selfLinks = this.shadowRoot.querySelectorAll('a[href*="yaktube.yakhub.com.tr"]');
+                  var selfLinks = this.shadowRoot.querySelectorAll(
+                    'a[href*="yaktube.yakhub.com.tr"], .yn-app-card.yn-current, a[aria-label="YakTube"]'
+                  );
                   selfLinks.forEach(function (a) {
                     a.style.display = 'none';
                   });
-                  // 2. In third-party PeerTube instances: Suppress entire external services grid & header to avoid community backlash
+
+                  // 2. In third-party PeerTube instances: Suppress entire external services grid & 9-dot launcher to avoid community backlash
                   if (!isOfficial) {
-                    var appsGrid = this.shadowRoot.querySelector('.yn-apps-grid');
+                    // Hide 9-dot apps button
+                    var appsBtn = this.shadowRoot.querySelector('#appsTriggerBtn, .yn-apps-btn');
+                    if (appsBtn) appsBtn.style.display = 'none';
+
+                    // Hide apps popover
+                    var appsPopover = this.shadowRoot.querySelector('#yn-apps-popover, .yn-apps-popover');
+                    if (appsPopover) appsPopover.style.display = 'none';
+
+                    // Legacy selectors for backwards compatibility
+                    var appsGrid = this.shadowRoot.querySelector('.yn-apps-grid, .yn-apps-grid-3col');
                     if (appsGrid) appsGrid.style.display = 'none';
-                    var sectionTitle = this.shadowRoot.querySelector('#yn-services-label, .yn-section-title');
+                    var sectionTitle = this.shadowRoot.querySelector('#yn-services-label, .yn-section-title, .yn-apps-footer');
                     if (sectionTitle) sectionTitle.style.display = 'none';
+                  }
+
+                  // 3. Ensure Logout Button Hook is attached whenever account menu renders
+                  var shadowLogoutBtn =
+                    this.shadowRoot.getElementById('logoutBtn') ||
+                    this.shadowRoot.querySelector('.yn-logout-btn') ||
+                    this.shadowRoot.querySelector('button[title*="Çıkış"], button[aria-label*="Çıkış"]');
+                  if (shadowLogoutBtn && !shadowLogoutBtn.hasAttribute('data-yaktube-hooked')) {
+                    shadowLogoutBtn.setAttribute('data-yaktube-hooked', 'true');
+                    shadowLogoutBtn.addEventListener(
+                      'click',
+                      function (ev) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        performUnifiedLogout();
+                      },
+                      true
+                    );
                   }
                 }
               } catch (e) {}
@@ -564,6 +595,7 @@ try {
               'base-url="https://developer-console.yakhub.com.tr" ' +
               'login-url="/login" ' +
               'authenticated="true" ' +
+              'hide-service="yaktube" ' +
               'user-name="' +
               displayName.replace(/"/g, '&quot;') +
               '" ' +
@@ -591,10 +623,15 @@ try {
             } else {
               var el = liveWidget.querySelector('yaknet-account');
               if (el) {
-                if (el.getAttribute('authenticated') !== 'true' || el.getAttribute('user-name') !== displayName) {
+                if (
+                  el.getAttribute('authenticated') !== 'true' ||
+                  el.getAttribute('user-name') !== displayName ||
+                  el.getAttribute('hide-service') !== 'yaktube'
+                ) {
                   el.setAttribute('authenticated', 'true');
                   el.setAttribute('user-name', displayName);
                   el.setAttribute('user-email', emailStr);
+                  el.setAttribute('hide-service', 'yaktube');
                   if (typeof el.syncStateFromAttributes === 'function') {
                     el.syncStateFromAttributes();
                     el.render();
@@ -603,7 +640,9 @@ try {
 
                 if (el.shadowRoot) {
                   // Direct DOM safety: remove self-link on polling cycle too
-                  var selfLinks = el.shadowRoot.querySelectorAll('a[href*="yaktube.yakhub.com.tr"]');
+                  var selfLinks = el.shadowRoot.querySelectorAll(
+                    'a[href*="yaktube.yakhub.com.tr"], .yn-app-card.yn-current, a[aria-label="YakTube"]'
+                  );
                   selfLinks.forEach(function (a) {
                     a.style.display = 'none';
                   });
