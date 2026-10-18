@@ -3172,6 +3172,9 @@ try {
 
       var isBrowsePage =
         path === '/' ||
+        path === '' ||
+        path === '/videos/overview' ||
+        path.indexOf('/videos/overview') === 0 ||
         path === '/videos/browse' ||
         path.indexOf('/videos/browse') === 0 ||
         path.indexOf('/search') === 0 ||
@@ -3188,8 +3191,11 @@ try {
       var targetElem =
         document.querySelector('my-video-filters-header') ||
         document.querySelector('my-videos-list') ||
+        document.querySelector('my-video-overview') ||
+        document.querySelector('my-home-menu') ||
         document.querySelector('my-search-results') ||
         document.querySelector('my-search') ||
+        document.querySelector('.main-row') ||
         document.querySelector('.main-col') ||
         document.querySelector('main');
 
@@ -3200,6 +3206,26 @@ try {
 
       var activeKey = getActiveCategoryKey();
       var existingBar = document.getElementById('yaktube-category-chips-bar');
+
+      if (existingBar) {
+        var isDetached = !existingBar.isConnected || !document.body.contains(existingBar);
+        var isWrongParent =
+          targetElem && targetElem.parentElement && existingBar.parentElement !== targetElem.parentElement;
+
+        if (isDetached) {
+          try {
+            existingBar.remove();
+          } catch (e) {}
+          existingBar = null;
+        } else if (isWrongParent) {
+          try {
+            targetElem.parentElement.insertBefore(existingBar, targetElem);
+          } catch (e) {
+            existingBar.remove();
+            existingBar = null;
+          }
+        }
+      }
 
       if (existingBar) {
         var chips = existingBar.querySelectorAll('.yaktube-category-chip');
@@ -3269,7 +3295,12 @@ try {
 
         chip.addEventListener('click', function (e) {
           e.preventDefault();
-          if (cat.key === getActiveCategoryKey()) return;
+          if (
+            cat.key === getActiveCategoryKey() &&
+            (window.location.pathname === '/videos/browse' ||
+              (cat.url && window.location.pathname + window.location.search === cat.url))
+          )
+            return;
 
           announce(cat.label + ' kategorisi seçildi.');
 
@@ -3319,6 +3350,8 @@ try {
       if (
         tag === 'my-video-filters-header' ||
         tag === 'my-videos-list' ||
+        tag === 'my-video-overview' ||
+        tag === 'my-home-menu' ||
         tag === 'my-search-results' ||
         tag === 'my-search'
       ) {
@@ -5645,7 +5678,13 @@ try {
       scheduleUnifiedCycle(true);
       setTimeout(function () {
         scheduleUnifiedCycle(false, 0);
-      }, 350);
+      }, 150);
+      setTimeout(function () {
+        scheduleUnifiedCycle(false, 0);
+      }, 450);
+      setTimeout(function () {
+        scheduleUnifiedCycle(false, 0);
+      }, 950);
     }
 
     window.addEventListener('popstate', onLocationChange);
