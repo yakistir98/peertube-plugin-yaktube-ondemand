@@ -690,7 +690,7 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
           ok: false,
           quotaExceeded: true,
           limit: guestImportLimit,
-          error: 'Kota Doldu: Misafir video indirme sınırına ulaştınız. Lütfen giriş yapın.'
+          error: 'Kota Doldu: Misafir video indirme sınırına ulaştınız. Sınırsız video aktarımı, yorum yapabilme ve diğer tüm ayrıcalıklar için lütfen giriş yapın.'
         });
       }
     }

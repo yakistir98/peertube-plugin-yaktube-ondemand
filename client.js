@@ -3181,20 +3181,37 @@ try {
       var instanceName = escapeHtml(getInstanceName());
 
       modal.innerHTML =
-        '<div class="yaktube-modal-box" style="max-width:440px; border: 2px solid #f97316;">' +
-        '<div style="font-size:42px; margin-bottom:8px;" aria-hidden="true">🔒</div>' +
-        '<h2 id="yaktube-quota-modal-title" class="yaktube-modal-title" style="margin-top:0; color:#ff8f37; font-size:22px;">Kota Doldu</h2>' +
-        '<div id="yaktube-quota-modal-desc" class="yaktube-modal-desc" style="font-size:14px; line-height:1.6; color:#e2e8f0; margin-bottom:20px;">' +
-        'Misafir kullanıcı olarak ücretsiz <strong>' +
+        '<div class="yaktube-modal-box" style="max-width:480px; border:2px solid #ff8f37; border-radius:18px; padding:24px 22px; text-align:left; background:#0f172a; box-shadow:0 12px 48px rgba(0,0,0,0.85);">' +
+        '<div style="text-align:center; margin-bottom:12px;">' +
+        '<div style="font-size:38px; line-height:1;" aria-hidden="true">🎉</div>' +
+        '<h2 id="yaktube-quota-modal-title" class="yaktube-modal-title" style="margin:8px 0 4px 0; color:#ff8f37; font-size:22px; font-weight:800;">Ücretsiz Misafir Sınırına Ulaştınız!</h2>' +
+        '<div id="yaktube-quota-modal-desc" class="yaktube-modal-desc" style="font-size:13.5px; color:#94a3b8; line-height:1.5;">' +
+        'Misafir kullanıcılar için ayrılan <strong>' +
         displayLimit +
-        ' video</strong> indirme sınırına ulaştınız.<br><br>' +
-        'Sınırsız video aktarmaya ve izlemeye devam etmek için <strong>lütfen giriş yapın</strong>.' +
+        ' video aktarma kotasını</strong> doldurdunuz.' +
+        '</div>' +
+        '</div>' +
+        '<div style="background:rgba(255,143,55,0.08); border:1px solid rgba(255,143,55,0.25); border-radius:14px; padding:14px 16px; margin:16px 0 20px 0;">' +
+        '<div style="font-weight:700; font-size:14.5px; color:#ffedd5; margin-bottom:10px; display:flex; align-items:center; gap:6px;">' +
+        '<span aria-hidden="true">✨</span>' +
+        '<span>Giriş Yaptığınızda Neler Kazanacaksınız?</span>' +
+        '</div>' +
+        '<ul style="margin:0; padding-left:20px; font-size:13px; line-height:1.65; color:#e2e8f0;">' +
+        '<li style="margin-bottom:6px;"><strong>Sınırsız Video İndirme:</strong> İstediğiniz tüm videoları anında platforma aktarıp yüksek kalitede kesintisiz izleyin.</li>' +
+        '<li style="margin-bottom:6px;"><strong>Yorum Yapabilme ve Yanıtlayabilme:</strong> Toplulukla etkileşime geçin, videolara yorum yazıp fikirlerinizi paylaşın.</li>' +
+        '<li style="margin-bottom:6px;"><strong>Kanal Açma ve İçerik Paylaşma:</strong> Kendi video veya müzik kanallarınızı oluşturarak içeriklerinizi yayınlayın.</li>' +
+        '<li style="margin-bottom:6px;"><strong>Oynatma Listeleri ve Geçmiş:</strong> Beğendiğiniz videoları kaydedin, istediğiniz yerden devam edin.</li>' +
+        '<li><strong>Tamamen Ücretsiz ve Reklamsız:</strong> Tüm bu ayrıcalıklar hiçbir ücret ödemeden sizleri bekliyor!</li>' +
+        '</ul>' +
         '</div>' +
         '<div style="display:flex; flex-direction:column; gap:10px;">' +
-        '<button type="button" id="yaktube-quota-login-btn" style="background:linear-gradient(135deg, #ff8f37 0%, #ea580c 100%); color:#000; font-weight:800; font-size:15px; padding:12px 20px; border:none; border-radius:10px; cursor:pointer; box-shadow: 0 4px 14px rgba(255,143,55,0.4);">🔑 Giriş Yap (' +
+        '<button type="button" id="yaktube-quota-login-btn" style="background:linear-gradient(135deg, #ff8f37 0%, #ea580c 100%); color:#000; font-weight:800; font-size:15px; padding:13px 20px; border:none; border-radius:10px; cursor:pointer; box-shadow:0 4px 14px rgba(255,143,55,0.4); text-align:center; display:flex; align-items:center; justify-content:center; gap:8px;">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>' +
+        '<span>Giriş Yap / Ücretsiz Hesap Aç (' +
         instanceName +
-        ')</button>' +
-        '<button type="button" id="yaktube-quota-close-btn" style="background:#1e293b; color:#cbd5e1; font-weight:600; font-size:13px; padding:10px 18px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; cursor:pointer;">Kapat</button>' +
+        ')</span>' +
+        '</button>' +
+        '<button type="button" id="yaktube-quota-close-btn" style="background:#1e293b; color:#cbd5e1; font-weight:600; font-size:13px; padding:10px 18px; border:1px solid rgba(255,255,255,0.15); border-radius:10px; cursor:pointer; text-align:center;">Kapat</button>' +
         '</div>' +
         '</div>';
 
@@ -3226,7 +3243,10 @@ try {
         }
       });
 
-      announce('Kota Doldu. Misafir video indirme sınırına ulaştınız. Devam etmek için lütfen giriş yapın.', true);
+      announce(
+        'Ücretsiz misafir indirme sınırına ulaştınız. Sınırsız video indirme, yorum yapma ve kendi kanalınızı açma ayrıcalıkları için lütfen giriş yapın veya ücretsiz hesap açın.',
+        true
+      );
     }
 
     function handleImport(url, btn, videoTitle) {
