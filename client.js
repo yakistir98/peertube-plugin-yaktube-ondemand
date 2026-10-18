@@ -2136,7 +2136,17 @@ try {
           e.preventDefault();
           focusVideoPlayer();
         });
-        document.body.insertBefore(skipLink, document.body.firstChild);
+      }
+
+      if (skipLink && !isEmbedUrl()) {
+        var skipContent = document.querySelector('.skip-to-content, a[href*="content"]');
+        if (skipContent) {
+          if (skipContent.nextElementSibling !== skipLink) {
+            skipContent.insertAdjacentElement('afterend', skipLink);
+          }
+        } else if (skipLink.parentElement !== document.body) {
+          document.body.insertBefore(skipLink, document.body.firstChild);
+        }
       }
 
       // 4. Configure Player Container (#videojs-wrapper or .video-js or #video-wrapper)
@@ -3155,7 +3165,7 @@ try {
       }
     }
 
-    function injectCategoryChipsBar() {
+    function isBrowsePageUrl() {
       var path = (window.location.pathname || '').toLowerCase();
       if (
         path.indexOf('/videos/watch') === 0 ||
@@ -3165,12 +3175,9 @@ try {
         path.indexOf('/my-library') === 0 ||
         path.indexOf('/settings') === 0
       ) {
-        var oldBar = document.getElementById('yaktube-category-chips-bar');
-        if (oldBar) oldBar.remove();
-        return;
+        return false;
       }
-
-      var isBrowsePage =
+      return (
         path === '/' ||
         path === '' ||
         path === '/videos/overview' ||
@@ -3180,9 +3187,12 @@ try {
         path.indexOf('/search') === 0 ||
         path.indexOf('/videos/trending') === 0 ||
         path.indexOf('/videos/recently-added') === 0 ||
-        path.indexOf('/videos/local') === 0;
+        path.indexOf('/videos/local') === 0
+      );
+    }
 
-      if (!isBrowsePage) {
+    function injectCategoryChipsBar() {
+      if (!isBrowsePageUrl()) {
         var exBar = document.getElementById('yaktube-category-chips-bar');
         if (exBar) exBar.remove();
         return;
@@ -3385,36 +3395,41 @@ try {
     }
 
     function injectSkipToCategoriesLink() {
-      if (document.getElementById('yaktube-skip-to-categories')) return;
+      var skipLink = document.getElementById('yaktube-skip-to-categories');
+
+      // Only show top skip-link on browse / overview pages where category bar actually exists
+      if (!isBrowsePageUrl()) {
+        if (skipLink) skipLink.remove();
+        return;
+      }
 
       var skipContent = document.querySelector('.skip-to-content, a[href*="content"]');
-      var toggleBtn = document.querySelector('.toggle-menu, button[title*="Yanal"], button[aria-label*="Yanal"]');
+      if (!skipContent) return;
 
-      var skipLink = document.createElement('a');
-      skipLink.id = 'yaktube-skip-to-categories';
-      skipLink.href = '#yaktube-category-chips-bar';
-      skipLink.className = 'visually-hidden-focusable skip-to-content yaktube-skip-categories';
-      skipLink.setAttribute('aria-label', 'Kategorilere atla');
-      skipLink.textContent = 'Kategorilere atla';
+      if (!skipLink) {
+        skipLink = document.createElement('a');
+        skipLink.id = 'yaktube-skip-to-categories';
+        skipLink.href = '#yaktube-category-chips-bar';
+        skipLink.className = 'visually-hidden-focusable skip-to-content yaktube-skip-categories';
+        skipLink.setAttribute('aria-label', 'Kategorilere atla');
+        skipLink.textContent = 'Kategorilere atla';
 
-      skipLink.addEventListener('click', function (e) {
-        e.preventDefault();
-        jumpToCategories();
-      });
-
-      skipLink.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
+        skipLink.addEventListener('click', function (e) {
           e.preventDefault();
           jumpToCategories();
-        }
-      });
+        });
 
-      if (skipContent && skipContent.parentElement) {
-        skipContent.parentElement.insertBefore(skipLink, skipContent.nextSibling);
-      } else if (toggleBtn && toggleBtn.parentElement) {
-        toggleBtn.parentElement.insertBefore(skipLink, toggleBtn);
-      } else {
-        document.body.prepend(skipLink);
+        skipLink.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            jumpToCategories();
+          }
+        });
+      }
+
+      // GUARANTEE: skipLink MUST ALWAYS be placed IMMEDIATELY AFTER skipContent ("Ana içeriğe atla")
+      if (skipContent.nextElementSibling !== skipLink) {
+        skipContent.insertAdjacentElement('afterend', skipLink);
       }
     }
 
