@@ -3120,6 +3120,36 @@ try {
       return 'all';
     }
 
+    function navigateCategorySeamless(targetUrl, key) {
+      if (!targetUrl) return;
+
+      try {
+        var isAll = (key === 'all' || targetUrl === '/videos/browse' || targetUrl === '/');
+        var intermediateUrl = isAll ? '/videos/browse?all=true' : targetUrl;
+
+        // SPA transition via HTML5 History + Angular popstate
+        history.pushState(null, '', intermediateUrl);
+        window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+
+        if (isAll) {
+          // Clean up the URL to /videos/browse after Angular processes the change
+          setTimeout(function () {
+            try {
+              history.replaceState(null, '', '/videos/browse');
+            } catch (e) {}
+          }, 350);
+        }
+
+        // Schedule unified engine cycle to ensure DOM consistency
+        if (typeof scheduleUnifiedCycle === 'function') {
+          scheduleUnifiedCycle(true);
+        }
+      } catch (err) {
+        console.warn('[YakTube] Seamless navigation fallback:', err);
+        window.location.href = targetUrl;
+      }
+    }
+
     function injectCategoryChipsBar() {
       var path = (window.location.pathname || '').toLowerCase();
       if (
@@ -3232,14 +3262,30 @@ try {
         }
 
         chip.addEventListener('click', function (e) {
-          if (cat.key === activeKey) {
-            e.preventDefault();
-            return;
-          }
+          e.preventDefault();
+          if (cat.key === getActiveCategoryKey()) return;
+
           announce(cat.label + ' kategorisi seçildi.');
+
+          // Immediate visual and ARIA active state update
+          var allChips = track.querySelectorAll('.yaktube-category-chip');
+          allChips.forEach(function (c) {
+            var isCurrent = (c === chip);
+            c.classList.toggle('active', isCurrent);
+            c.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+            c.setAttribute('tabindex', isCurrent ? '0' : '-1');
+          });
+
+          // Seamless SPA navigation without page reload (v1.6.1)
+          navigateCategorySeamless(cat.url, cat.key);
         });
 
         chip.addEventListener('keydown', function (e) {
+          if (e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            chip.click();
+            return;
+          }
           if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault();
             var next = chip.nextElementSibling;
