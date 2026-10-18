@@ -145,7 +145,123 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       private: true,
       default: ''
     });
+
+    registerSetting({
+      name: 'home-categories',
+      label: 'Ana Sayfa Kategori Çipleri (YouTube Tarzı)',
+      type: 'input-textarea',
+      description:
+        'Ana sayfada video ızgarasının üstünde gösterilecek kategori butonlarını düzenleyin, silin veya yenilerini ekleyin. Virgülle veya alt alta yazabilirsiniz (Örn: Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar).',
+      private: false,
+      default: 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar'
+    });
   }
+
+  let rawHomeCategories = 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar';
+  let parsedHomeCategories = [];
+
+  function parseHomeCategories(str) {
+    if (!str || typeof str !== 'string' || str.trim() === '') {
+      str = 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar';
+    }
+    const lines = str.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const result = [];
+
+    const categoryMap = {
+      'müzik': 1, 'music': 1,
+      'film': 2, 'filmler': 2, 'films': 2, 'sinema': 2, 'cinema': 2,
+      'araçlar': 3, 'otomotiv': 3, 'arabalar': 3, 'vehicles': 3, 'cars': 3,
+      'sanat': 4, 'art': 4,
+      'spor': 5, 'sports': 5, 'futbol': 5,
+      'seyahat': 6, 'gezi': 6, 'travel': 6, 'travels': 6,
+      'oyun': 7, 'oyunlar': 7, 'gaming': 7, 'games': 7,
+      'insanlar': 8, 'blog': 8, 'vlog': 8, 'people': 8,
+      'komedi': 9, 'mizah': 9, 'comedy': 9, 'funny': 9,
+      'eğlence': 10, 'eglence': 10, 'entertainment': 10,
+      'haberler': 11, 'haber': 11, 'gündem': 11, 'siyaset': 11, 'politika': 11, 'news': 11,
+      'nasıl yapılır': 12, 'pratik bilgiler': 12, 'how to': 12, 'howto': 12,
+      'eğitim': 13, 'egitim': 13, 'ders': 13, 'education': 13,
+      'aktivizm': 14, 'activism': 14,
+      'bilim': 15, 'teknoloji': 15, 'bilim ve teknoloji': 15, 'bilim & teknoloji': 15, 'science': 15, 'technology': 15, 'yazılım': 15,
+      'hayvanlar': 16, 'doğa': 16, 'animals': 16,
+      'çocuklar': 17, 'çocuk': 17, 'kids': 17,
+      'yemek': 18, 'mutfak': 18, 'food': 18, 'cooking': 18
+    };
+
+    for (const item of lines) {
+      const lower = item.toLowerCase();
+      if (lower === 'tümü' || lower === 'all' || lower === 'hepsi') {
+        result.push({
+          label: item,
+          key: 'all',
+          url: '/videos/browse'
+        });
+        continue;
+      }
+
+      if (item.includes(':')) {
+        const parts = item.split(':');
+        const label = parts[0].trim();
+        const val = parts.slice(1).join(':').trim();
+        if (/^\d+$/.test(val)) {
+          result.push({
+            label,
+            key: 'cat_' + val,
+            url: `/videos/browse?categoryOneOf=${val}`
+          });
+        } else if (val === 'live' || val === 'isLive') {
+          result.push({
+            label,
+            key: 'live',
+            url: '/videos/browse?isLive=true'
+          });
+        } else if (val.startsWith('sort=')) {
+          result.push({
+            label,
+            key: 'sort_' + val.split('=')[1],
+            url: `/videos/browse?${val}`
+          });
+        } else if (val.startsWith('search=')) {
+          result.push({
+            label,
+            key: 'search_' + val.split('=')[1],
+            url: `/search?search=${encodeURIComponent(val.split('=')[1])}`
+          });
+        } else {
+          result.push({
+            label,
+            key: 'search_' + val,
+            url: `/search?search=${encodeURIComponent(val)}`
+          });
+        }
+        continue;
+      }
+
+      if (lower === 'canlı' || lower === 'canlı yayın' || lower === 'canlı yayınlar' || lower === 'live') {
+        result.push({
+          label: item,
+          key: 'live',
+          url: '/videos/browse?isLive=true'
+        });
+      } else if (categoryMap[lower] !== undefined) {
+        const catId = categoryMap[lower];
+        result.push({
+          label: item,
+          key: 'cat_' + catId,
+          url: `/videos/browse?categoryOneOf=${catId}`
+        });
+      } else {
+        result.push({
+          label: item,
+          key: 'search_' + lower,
+          url: `/search?search=${encodeURIComponent(item)}`
+        });
+      }
+    }
+
+    return result;
+  }
+  parsedHomeCategories = parseHomeCategories(rawHomeCategories);
 
   async function loadPluginSettings() {
     if (!settingsManager || typeof settingsManager.getSetting !== 'function') return;
@@ -177,6 +293,16 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
     try {
       const binVal = await settingsManager.getSetting('ytdlp-binary-path');
       customYtDlpPath = binVal ? String(binVal).trim() : '';
+    } catch (e) {}
+
+    try {
+      const catsVal = await settingsManager.getSetting('home-categories');
+      if (catsVal !== undefined && catsVal !== null && String(catsVal).trim() !== '') {
+        rawHomeCategories = String(catsVal).trim();
+      } else {
+        rawHomeCategories = 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar';
+      }
+      parsedHomeCategories = parseHomeCategories(rawHomeCategories);
     } catch (e) {}
   }
 
@@ -572,10 +698,24 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
     4 * 60 * 60 * 1000
   );
 
-  // 1. Quota & Storage Config Routes
+  // 1. Quota, Categories & Storage Config Routes
   router.get('/quota-config', async (_req, res) => {
     await loadPluginSettings();
-    return res.json({ ok: true, guestImportLimit, maxDiskUsagePercent });
+    return res.json({
+      ok: true,
+      guestImportLimit,
+      maxDiskUsagePercent,
+      categories: parsedHomeCategories
+    });
+  });
+
+  router.get('/categories-config', async (_req, res) => {
+    await loadPluginSettings();
+    return res.json({
+      ok: true,
+      raw: rawHomeCategories,
+      categories: parsedHomeCategories
+    });
   });
 
   router.get('/storage-status', async (_req, res) => {

@@ -3063,22 +3063,216 @@ try {
 
     // --- Guest Video Import Quota & PeerTube Login Redirect Engine ---
     var cachedGuestImportLimit = null;
+    var cachedCategories = null;
 
     function fetchGuestImportLimit() {
-      if (cachedGuestImportLimit !== null) {
+      if (cachedGuestImportLimit !== null && cachedCategories !== null) {
         return Promise.resolve(cachedGuestImportLimit);
       }
       return fetchPluginJson('/quota-config')
         .then(function (d) {
           if (d && typeof d.guestImportLimit === 'number') {
             cachedGuestImportLimit = d.guestImportLimit;
-            return cachedGuestImportLimit;
           }
-          return 5;
+          if (d && Array.isArray(d.categories) && d.categories.length > 0) {
+            cachedCategories = d.categories;
+            try {
+              injectCategoryChipsBar();
+            } catch (e) {}
+          }
+          return cachedGuestImportLimit || 5;
         })
         .catch(function () {
           return 5;
         });
+    }
+
+    // --- YouTube-Style Category Chips Bar Engine (v1.6.0) ---
+    var defaultCategories = [
+      { label: 'Tümü', key: 'all', url: '/videos/browse' },
+      { label: 'Müzik', key: 'cat_1', url: '/videos/browse?categoryOneOf=1' },
+      { label: 'Eğlence', key: 'cat_10', url: '/videos/browse?categoryOneOf=10' },
+      { label: 'Oyun', key: 'cat_7', url: '/videos/browse?categoryOneOf=7' },
+      { label: 'Haberler', key: 'cat_11', url: '/videos/browse?categoryOneOf=11' },
+      { label: 'Eğitim', key: 'cat_13', url: '/videos/browse?categoryOneOf=13' },
+      { label: 'Bilim & Teknoloji', key: 'cat_15', url: '/videos/browse?categoryOneOf=15' },
+      { label: 'Film', key: 'cat_2', url: '/videos/browse?categoryOneOf=2' },
+      { label: 'Spor', key: 'cat_5', url: '/videos/browse?categoryOneOf=5' },
+      { label: 'Canlı Yayınlar', key: 'live', url: '/videos/browse?isLive=true' }
+    ];
+
+    function getActiveCategoryKey() {
+      var search = window.location.search || '';
+      var path = window.location.pathname || '';
+      if (search.indexOf('categoryOneOf=') !== -1) {
+        var m = search.match(/categoryOneOf=(\d+)/);
+        if (m && m[1]) return 'cat_' + m[1];
+      }
+      if (search.indexOf('isLive=true') !== -1) return 'live';
+      if (path.indexOf('/search') !== -1) {
+        var sm = search.match(/search=([^&]+)/);
+        if (sm && sm[1]) return 'search_' + decodeURIComponent(sm[1]).toLowerCase();
+      }
+      if (search.indexOf('sort=') !== -1) {
+        var sortm = search.match(/sort=([^&]+)/);
+        if (sortm && sortm[1]) return 'sort_' + sortm[1];
+      }
+      return 'all';
+    }
+
+    function injectCategoryChipsBar() {
+      var path = (window.location.pathname || '').toLowerCase();
+      if (
+        path.indexOf('/videos/watch') === 0 ||
+        path.indexOf('/w/') === 0 ||
+        path.indexOf('/login') === 0 ||
+        path.indexOf('/admin') === 0 ||
+        path.indexOf('/my-library') === 0 ||
+        path.indexOf('/settings') === 0
+      ) {
+        var oldBar = document.getElementById('yaktube-category-chips-bar');
+        if (oldBar) oldBar.remove();
+        return;
+      }
+
+      var isBrowsePage =
+        path === '/' ||
+        path === '/videos/browse' ||
+        path.indexOf('/videos/browse') === 0 ||
+        path.indexOf('/search') === 0 ||
+        path.indexOf('/videos/trending') === 0 ||
+        path.indexOf('/videos/recently-added') === 0 ||
+        path.indexOf('/videos/local') === 0;
+
+      if (!isBrowsePage) {
+        var exBar = document.getElementById('yaktube-category-chips-bar');
+        if (exBar) exBar.remove();
+        return;
+      }
+
+      var targetElem =
+        document.querySelector('my-video-filters-header') ||
+        document.querySelector('my-videos-list') ||
+        document.querySelector('my-search-results') ||
+        document.querySelector('my-search') ||
+        document.querySelector('.main-col') ||
+        document.querySelector('main');
+
+      if (!targetElem) return;
+
+      var categories = (Array.isArray(cachedCategories) && cachedCategories.length > 0)
+        ? cachedCategories
+        : defaultCategories;
+
+      var activeKey = getActiveCategoryKey();
+      var existingBar = document.getElementById('yaktube-category-chips-bar');
+
+      if (existingBar) {
+        var chips = existingBar.querySelectorAll('.yaktube-category-chip');
+        chips.forEach(function (chip) {
+          var cKey = chip.getAttribute('data-chip-key');
+          var isActive = (cKey === activeKey);
+          chip.classList.toggle('active', isActive);
+          chip.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          chip.setAttribute('tabindex', isActive ? '0' : '-1');
+        });
+        return;
+      }
+
+      var bar = document.createElement('nav');
+      bar.id = 'yaktube-category-chips-bar';
+      bar.className = 'yaktube-category-chips-container';
+      bar.setAttribute('aria-label', 'Video Kategorileri');
+      bar.setAttribute('role', 'navigation');
+
+      var wrapper = document.createElement('div');
+      wrapper.className = 'yaktube-chips-wrapper';
+
+      var leftBtn = document.createElement('button');
+      leftBtn.type = 'button';
+      leftBtn.className = 'yaktube-chips-arrow yaktube-chips-arrow-left';
+      leftBtn.setAttribute('aria-label', 'Önceki Kategoriler');
+      leftBtn.innerHTML = '‹';
+
+      var track = document.createElement('div');
+      track.className = 'yaktube-chips-track';
+      track.setAttribute('role', 'tablist');
+      track.setAttribute('aria-label', 'Kategori Listesi');
+
+      var rightBtn = document.createElement('button');
+      rightBtn.type = 'button';
+      rightBtn.className = 'yaktube-chips-arrow yaktube-chips-arrow-right';
+      rightBtn.setAttribute('aria-label', 'Sonraki Kategoriler');
+      rightBtn.innerHTML = '›';
+
+      leftBtn.addEventListener('click', function () {
+        track.scrollBy({ left: -220, behavior: 'smooth' });
+      });
+
+      rightBtn.addEventListener('click', function () {
+        track.scrollBy({ left: 220, behavior: 'smooth' });
+      });
+
+      categories.forEach(function (cat) {
+        var chip = document.createElement('a');
+        chip.href = cat.url || '/videos/browse';
+        chip.className = 'yaktube-category-chip';
+        chip.setAttribute('data-chip-key', cat.key || '');
+        chip.setAttribute('role', 'tab');
+        chip.textContent = cat.label || '';
+
+        var isActive = (cat.key === activeKey);
+        if (isActive) {
+          chip.classList.add('active');
+          chip.setAttribute('aria-selected', 'true');
+          chip.setAttribute('tabindex', '0');
+        } else {
+          chip.setAttribute('aria-selected', 'false');
+          chip.setAttribute('tabindex', '-1');
+        }
+
+        chip.addEventListener('click', function (e) {
+          if (cat.key === activeKey) {
+            e.preventDefault();
+            return;
+          }
+          announce(cat.label + ' kategorisi seçildi.');
+        });
+
+        chip.addEventListener('keydown', function (e) {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            var next = chip.nextElementSibling;
+            if (next && next.classList.contains('yaktube-category-chip')) {
+              next.focus();
+            }
+          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            var prev = chip.previousElementSibling;
+            if (prev && prev.classList.contains('yaktube-category-chip')) {
+              prev.focus();
+            }
+          }
+        });
+
+        track.appendChild(chip);
+      });
+
+      wrapper.appendChild(leftBtn);
+      wrapper.appendChild(track);
+      wrapper.appendChild(rightBtn);
+      bar.appendChild(wrapper);
+
+      var tag = targetElem.tagName.toLowerCase();
+      if (tag === 'my-video-filters-header' || tag === 'my-videos-list' || tag === 'my-search-results' || tag === 'my-search') {
+        if (targetElem.parentElement) {
+          targetElem.parentElement.insertBefore(bar, targetElem);
+        } else {
+          targetElem.prepend(bar);
+        }
+      } else {
+        targetElem.prepend(bar);
+      }
     }
 
     // Pre-fetch guest import quota setting quietly on startup
@@ -5341,6 +5535,10 @@ try {
 
       try {
         injectSearchEnhancements();
+      } catch (e) {}
+
+      try {
+        injectCategoryChipsBar();
       } catch (e) {}
 
       try {

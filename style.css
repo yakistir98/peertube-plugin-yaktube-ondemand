@@ -1561,3 +1561,123 @@ my-date-toggle .date-toggle:focus-visible {
     min-height: 42px !important;
   }
 }
+
+/* ==========================================================================
+   8. YouTube-Style Horizontal Category Chips Bar (v1.6.0)
+   ========================================================================== */
+
+.yaktube-category-chips-container {
+  display: block;
+  width: 100%;
+  margin: 12px 0 16px 0;
+  position: relative;
+  z-index: 10;
+  user-select: none;
+  font-family: inherit;
+}
+
+.yaktube-chips-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+}
+
+.yaktube-chips-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  padding: 4px 2px;
+  width: 100%;
+}
+
+.yaktube-chips-track::-webkit-scrollbar {
+  display: none; /* Chrome / Safari / Edge */
+}
+
+.yaktube-category-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 15px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #f1f1f1 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  text-decoration: none !important;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  flex-shrink: 0;
+  outline: none;
+}
+
+.yaktube-category-chip:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  text-decoration: none !important;
+}
+
+.yaktube-category-chip:focus-visible {
+  outline: 2px solid #ff8f37 !important;
+  outline-offset: 2px !important;
+}
+
+.yaktube-category-chip.active,
+.yaktube-category-chip[aria-selected="true"] {
+  background: #ff8f37 !important;
+  color: #000000 !important;
+  font-weight: 800 !important;
+  border-color: #ea580c !important;
+  box-shadow: 0 2px 10px rgba(255, 143, 55, 0.4) !important;
+}
+
+.yaktube-chips-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1e293b;
+  color: #f1f1f1;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  font-size: 20px;
+  line-height: 1;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin: 0 4px;
+  transition: all 0.15s ease;
+  z-index: 5;
+}
+
+.yaktube-chips-arrow:hover {
+  background: #334155;
+  color: #ff8f37;
+  border-color: #ff8f37;
+}
+
+.yaktube-chips-arrow:focus-visible {
+  outline: 2px solid #ff8f37;
+}
+
+@media (max-width: 768px) {
+  .yaktube-chips-arrow {
+    display: none !important;
+  }
+  .yaktube-category-chips-container {
+    margin: 6px 0 12px 0;
+  }
+}
+
