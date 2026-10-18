@@ -615,15 +615,13 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
          FROM "videoImport" vi
          INNER JOIN "video" v ON v.id = vi."videoId"
          WHERE vi."targetUrl" IS NOT NULL
-         ORDER BY vi.id DESC
-         LIMIT 200`
+         ORDER BY vi.id DESC`
       );
       const localVideos = await dbQuery(
         `SELECT id, uuid, name
          FROM "video"
          WHERE remote = false AND state = 1
-         ORDER BY id DESC
-         LIMIT 200`
+         ORDER BY id DESC`
       );
 
       return results.map(item => {
