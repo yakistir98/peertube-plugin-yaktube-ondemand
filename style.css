@@ -1633,7 +1633,7 @@ my-date-toggle .date-toggle:focus-visible {
 }
 
 .yaktube-category-chip.active,
-.yaktube-category-chip[aria-selected="true"] {
+.yaktube-category-chip[aria-selected='true'] {
   background: #ff8f37 !important;
   color: #000000 !important;
   font-weight: 800 !important;
@@ -1681,3 +1681,49 @@ my-date-toggle .date-toggle:focus-visible {
   }
 }
 
+/* Skip to Categories button & Sidebar shortcut */
+.yaktube-skip-categories {
+  position: absolute !important;
+  top: 10px !important;
+  left: 160px !important;
+  z-index: 100000 !important;
+  background: #ff8f37 !important;
+  color: #000000 !important;
+  padding: 8px 16px !important;
+  border-radius: 6px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5) !important;
+}
+
+.yaktube-skip-categories:not(:focus):not(:focus-within) {
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.yaktube-menu-categories-item {
+  margin: 4px 0;
+}
+
+.yaktube-menu-categories-link {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  font-weight: 600 !important;
+  color: #ff8f37 !important;
+  cursor: pointer !important;
+  border-radius: 8px !important;
+  transition: background-color 0.15s ease !important;
+}
+
+.yaktube-menu-categories-link:hover,
+.yaktube-menu-categories-link:focus-visible {
+  background-color: rgba(255, 143, 55, 0.15) !important;
+  outline: 2px solid #ff8f37 !important;
+}

@@ -3365,6 +3365,101 @@ try {
       }
     }
 
+    function jumpToCategories() {
+      var bar = document.getElementById('yaktube-category-chips-bar');
+      if (bar) {
+        var activeOrFirst =
+          bar.querySelector('.yaktube-category-chip.active') || bar.querySelector('.yaktube-category-chip');
+        if (activeOrFirst) {
+          activeOrFirst.focus();
+          try {
+            activeOrFirst.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          } catch (e) {}
+          announce('Kategori çubuğuna odaklanıldı: ' + (activeOrFirst.textContent || 'Tümü'));
+          return true;
+        }
+      }
+      // If categories bar is not on current page (e.g. watch page), navigate to browse
+      window.location.href = '/videos/browse';
+      return false;
+    }
+
+    function injectSkipToCategoriesLink() {
+      if (document.getElementById('yaktube-skip-to-categories')) return;
+
+      var skipContent = document.querySelector('.skip-to-content, a[href*="content"]');
+      var toggleBtn = document.querySelector('.toggle-menu, button[title*="Yanal"], button[aria-label*="Yanal"]');
+
+      var skipLink = document.createElement('a');
+      skipLink.id = 'yaktube-skip-to-categories';
+      skipLink.href = '#yaktube-category-chips-bar';
+      skipLink.className = 'visually-hidden-focusable skip-to-content yaktube-skip-categories';
+      skipLink.setAttribute('aria-label', 'Kategorilere atla');
+      skipLink.textContent = 'Kategorilere atla';
+
+      skipLink.addEventListener('click', function (e) {
+        e.preventDefault();
+        jumpToCategories();
+      });
+
+      skipLink.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          jumpToCategories();
+        }
+      });
+
+      if (skipContent && skipContent.parentElement) {
+        skipContent.parentElement.insertBefore(skipLink, skipContent.nextSibling);
+      } else if (toggleBtn && toggleBtn.parentElement) {
+        toggleBtn.parentElement.insertBefore(skipLink, toggleBtn);
+      } else {
+        document.body.prepend(skipLink);
+      }
+    }
+
+    function injectSidebarCategoriesLink() {
+      if (document.getElementById('yaktube-sidebar-categories-link')) return;
+
+      var menuContainer = document.querySelector('my-menu .quick-access, my-menu ul, .main-menu ul');
+      if (!menuContainer) return;
+
+      var li = document.createElement('li');
+      li.className = 'menu-item yaktube-menu-categories-item';
+
+      var link = document.createElement('a');
+      link.id = 'yaktube-sidebar-categories-link';
+      link.href = '#yaktube-category-chips-bar';
+      link.className = 'menu-link item-link yaktube-menu-categories-link';
+      link.setAttribute('role', 'button');
+      link.setAttribute('aria-label', 'Video kategorilerine atla');
+      link.innerHTML =
+        '<span aria-hidden="true" style="font-size: 16px; margin-right: 8px;">🏷️</span> <span>Kategorilere atla</span>';
+
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        jumpToCategories();
+      });
+
+      link.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          jumpToCategories();
+        }
+      });
+
+      li.appendChild(link);
+
+      var firstLi = menuContainer.querySelector('li');
+      if (firstLi && firstLi.nextSibling) {
+        menuContainer.insertBefore(li, firstLi.nextSibling);
+      } else if (firstLi) {
+        menuContainer.appendChild(li);
+      } else {
+        menuContainer.prepend(li);
+      }
+    }
+
     // Pre-fetch guest import quota setting quietly on startup
     setTimeout(function () {
       fetchGuestImportLimit();
@@ -5629,6 +5724,14 @@ try {
 
       try {
         injectCategoryChipsBar();
+      } catch (e) {}
+
+      try {
+        injectSkipToCategoriesLink();
+      } catch (e) {}
+
+      try {
+        injectSidebarCategoriesLink();
       } catch (e) {}
 
       try {
