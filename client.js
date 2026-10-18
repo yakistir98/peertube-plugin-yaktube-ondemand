@@ -214,7 +214,9 @@ try {
                     // Legacy selectors for backwards compatibility
                     var appsGrid = this.shadowRoot.querySelector('.yn-apps-grid, .yn-apps-grid-3col');
                     if (appsGrid) appsGrid.style.display = 'none';
-                    var sectionTitle = this.shadowRoot.querySelector('#yn-services-label, .yn-section-title, .yn-apps-footer');
+                    var sectionTitle = this.shadowRoot.querySelector(
+                      '#yn-services-label, .yn-section-title, .yn-apps-footer'
+                    );
                     if (sectionTitle) sectionTitle.style.display = 'none';
                   }
 
@@ -1270,10 +1272,12 @@ try {
       var toast = document.createElement('div');
       toast.id = 'yaktube-quick-toast';
       toast.className = 'yaktube-quick-toast';
-      var isEmbed = (typeof isEmbedUrl === 'function' && isEmbedUrl()) || (window.self !== window.top);
+      var isEmbed = (typeof isEmbedUrl === 'function' && isEmbedUrl()) || window.self !== window.top;
       var toastTop = isEmbed ? '28px' : '80px';
       toast.style.cssText =
-        'position:fixed!important;top:' + toastTop + '!important;left:50%!important;transform:translateX(-50%)!important;' +
+        'position:fixed!important;top:' +
+        toastTop +
+        '!important;left:50%!important;transform:translateX(-50%)!important;' +
         'background:rgba(24,24,31,0.92)!important;border:1px solid #ff8f37!important;color:#fff!important;' +
         'padding:8px 18px!important;border-radius:30px!important;font-size:13px!important;font-weight:700!important;' +
         'box-shadow:0 10px 30px rgba(0,0,0,0.8)!important;z-index:999999!important;pointer-events:none!important;' +
@@ -1791,7 +1795,9 @@ try {
         );
         var videoTitle = titleEl
           ? titleEl.textContent.trim()
-          : (document.title ? document.title.replace(/\s*-\s*(PeerTube|YakTube).*$/i, '').trim() : 'Video');
+          : document.title
+            ? document.title.replace(/\s*-\s*(PeerTube|YakTube).*$/i, '').trim()
+            : 'Video';
         var video = getVideoElement();
         var status = video ? (video.paused ? 'Duraklatıldı' : 'Oynatılıyor') : '';
         announce(
@@ -1950,12 +1956,7 @@ try {
     function isWatchUrl() {
       if (typeof window === 'undefined' || !window.location) return false;
       var p = window.location.pathname;
-      return (
-        p.includes('/videos/watch/') ||
-        p.startsWith('/w/') ||
-        p.includes('/w/') ||
-        isEmbedUrl()
-      );
+      return p.includes('/videos/watch/') || p.startsWith('/w/') || p.includes('/w/') || isEmbedUrl();
     }
 
     function injectControlBarSeekButtons(playerWrapper) {
@@ -2119,7 +2120,9 @@ try {
       );
       var videoTitle = titleEl
         ? titleEl.textContent.trim()
-        : (document.title ? document.title.replace(/\s*-\s*(PeerTube|YakTube).*$/i, '').trim() : 'Video');
+        : document.title
+          ? document.title.replace(/\s*-\s*(PeerTube|YakTube).*$/i, '').trim()
+          : 'Video';
 
       // 3. Setup Top-Level Skip Link: "🎬 Video Oynatıcıya Atla (Alt+P)"
       if (!skipLink && !isEmbedUrl()) {
@@ -3087,18 +3090,20 @@ try {
         });
     }
 
-    // --- YouTube-Style Category Chips Bar Engine (v1.6.0) ---
+    // --- YouTube-Style Category Chips Bar Engine (v1.6.2) ---
     var defaultCategories = [
       { label: 'Tümü', key: 'all', url: '/videos/browse' },
       { label: 'Müzik', key: 'cat_1', url: '/videos/browse?categoryOneOf=1' },
-      { label: 'Eğlence', key: 'cat_10', url: '/videos/browse?categoryOneOf=10' },
       { label: 'Oyun', key: 'cat_7', url: '/videos/browse?categoryOneOf=7' },
-      { label: 'Haberler', key: 'cat_11', url: '/videos/browse?categoryOneOf=11' },
-      { label: 'Eğitim', key: 'cat_13', url: '/videos/browse?categoryOneOf=13' },
-      { label: 'Bilim & Teknoloji', key: 'cat_15', url: '/videos/browse?categoryOneOf=15' },
-      { label: 'Film', key: 'cat_2', url: '/videos/browse?categoryOneOf=2' },
-      { label: 'Spor', key: 'cat_5', url: '/videos/browse?categoryOneOf=5' },
-      { label: 'Canlı Yayınlar', key: 'live', url: '/videos/browse?isLive=true' }
+      { label: 'Canlı', key: 'live', url: '/videos/browse?isLive=true' },
+      { label: 'Rap yapma', key: 'search_rap', url: '/search?search=rap' },
+      { label: 'Evcil hayvanlar', key: 'cat_16', url: '/videos/browse?categoryOneOf=16' },
+      { label: 'Komedi skeç gösterileri', key: 'cat_9', url: '/videos/browse?categoryOneOf=9' },
+      { label: 'Doğa', key: 'cat_6', url: '/videos/browse?categoryOneOf=6' },
+      { label: 'Futbol', key: 'cat_5', url: '/videos/browse?categoryOneOf=5' },
+      { label: 'Son yüklenenler', key: 'sort_publishedAt', url: '/videos/browse?sort=-publishedAt' },
+      { label: 'İzlenenler', key: 'sort_views', url: '/videos/browse?sort=-views' },
+      { label: 'Yeni öneriler', key: 'sort_hot', url: '/videos/browse?sort=-hot' }
     ];
 
     function getActiveCategoryKey() {
@@ -3114,8 +3119,8 @@ try {
         if (sm && sm[1]) return 'search_' + decodeURIComponent(sm[1]).toLowerCase();
       }
       if (search.indexOf('sort=') !== -1) {
-        var sortm = search.match(/sort=([^&]+)/);
-        if (sortm && sortm[1]) return 'sort_' + sortm[1];
+        var sortm = search.match(/sort=(-?[^&]+)/);
+        if (sortm && sortm[1]) return 'sort_' + sortm[1].replace(/^-/, '');
       }
       return 'all';
     }
@@ -3124,7 +3129,7 @@ try {
       if (!targetUrl) return;
 
       try {
-        var isAll = (key === 'all' || targetUrl === '/videos/browse' || targetUrl === '/');
+        var isAll = key === 'all' || targetUrl === '/videos/browse' || targetUrl === '/';
         var intermediateUrl = isAll ? '/videos/browse?all=true' : targetUrl;
 
         // SPA transition via HTML5 History + Angular popstate
@@ -3190,9 +3195,8 @@ try {
 
       if (!targetElem) return;
 
-      var categories = (Array.isArray(cachedCategories) && cachedCategories.length > 0)
-        ? cachedCategories
-        : defaultCategories;
+      var categories =
+        Array.isArray(cachedCategories) && cachedCategories.length > 0 ? cachedCategories : defaultCategories;
 
       var activeKey = getActiveCategoryKey();
       var existingBar = document.getElementById('yaktube-category-chips-bar');
@@ -3201,7 +3205,7 @@ try {
         var chips = existingBar.querySelectorAll('.yaktube-category-chip');
         chips.forEach(function (chip) {
           var cKey = chip.getAttribute('data-chip-key');
-          var isActive = (cKey === activeKey);
+          var isActive = cKey === activeKey;
           chip.classList.toggle('active', isActive);
           chip.setAttribute('aria-selected', isActive ? 'true' : 'false');
           chip.setAttribute('tabindex', isActive ? '0' : '-1');
@@ -3221,7 +3225,8 @@ try {
       var leftBtn = document.createElement('button');
       leftBtn.type = 'button';
       leftBtn.className = 'yaktube-chips-arrow yaktube-chips-arrow-left';
-      leftBtn.setAttribute('aria-label', 'Önceki Kategoriler');
+      leftBtn.setAttribute('aria-label', 'Geri');
+      leftBtn.title = 'Geri';
       leftBtn.innerHTML = '‹';
 
       var track = document.createElement('div');
@@ -3232,7 +3237,8 @@ try {
       var rightBtn = document.createElement('button');
       rightBtn.type = 'button';
       rightBtn.className = 'yaktube-chips-arrow yaktube-chips-arrow-right';
-      rightBtn.setAttribute('aria-label', 'Sonraki Kategoriler');
+      rightBtn.setAttribute('aria-label', 'İleri');
+      rightBtn.title = 'İleri';
       rightBtn.innerHTML = '›';
 
       leftBtn.addEventListener('click', function () {
@@ -3251,7 +3257,7 @@ try {
         chip.setAttribute('role', 'tab');
         chip.textContent = cat.label || '';
 
-        var isActive = (cat.key === activeKey);
+        var isActive = cat.key === activeKey;
         if (isActive) {
           chip.classList.add('active');
           chip.setAttribute('aria-selected', 'true');
@@ -3270,7 +3276,7 @@ try {
           // Immediate visual and ARIA active state update
           var allChips = track.querySelectorAll('.yaktube-category-chip');
           allChips.forEach(function (c) {
-            var isCurrent = (c === chip);
+            var isCurrent = c === chip;
             c.classList.toggle('active', isCurrent);
             c.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
             c.setAttribute('tabindex', isCurrent ? '0' : '-1');
@@ -3310,7 +3316,12 @@ try {
       bar.appendChild(wrapper);
 
       var tag = targetElem.tagName.toLowerCase();
-      if (tag === 'my-video-filters-header' || tag === 'my-videos-list' || tag === 'my-search-results' || tag === 'my-search') {
+      if (
+        tag === 'my-video-filters-header' ||
+        tag === 'my-videos-list' ||
+        tag === 'my-search-results' ||
+        tag === 'my-search'
+      ) {
         if (targetElem.parentElement) {
           targetElem.parentElement.insertBefore(bar, targetElem);
         } else {

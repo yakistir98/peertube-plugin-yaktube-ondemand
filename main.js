@@ -151,41 +151,107 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       label: 'Ana Sayfa Kategori Çipleri (YouTube Tarzı)',
       type: 'input-textarea',
       description:
-        'Ana sayfada video ızgarasının üstünde gösterilecek kategori butonlarını düzenleyin, silin veya yenilerini ekleyin. Virgülle veya alt alta yazabilirsiniz (Örn: Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar).',
+        'Ana sayfada video ızgarasının üstünde gösterilecek kategori butonlarını düzenleyin, silin veya yenilerini ekleyin. Virgülle veya alt alta yazabilirsiniz (Örn: Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler).',
       private: false,
-      default: 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar'
+      default:
+        'Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler'
     });
   }
 
-  let rawHomeCategories = 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar';
+  let rawHomeCategories =
+    'Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler';
   let parsedHomeCategories = [];
 
   function parseHomeCategories(str) {
     if (!str || typeof str !== 'string' || str.trim() === '') {
-      str = 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar';
+      str =
+        'Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler';
     }
-    const lines = str.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const lines = str
+      .split(/[\n,]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
     const result = [];
 
     const categoryMap = {
-      'müzik': 1, 'music': 1,
-      'film': 2, 'filmler': 2, 'films': 2, 'sinema': 2, 'cinema': 2,
-      'araçlar': 3, 'otomotiv': 3, 'arabalar': 3, 'vehicles': 3, 'cars': 3,
-      'sanat': 4, 'art': 4,
-      'spor': 5, 'sports': 5, 'futbol': 5,
-      'seyahat': 6, 'gezi': 6, 'travel': 6, 'travels': 6,
-      'oyun': 7, 'oyunlar': 7, 'gaming': 7, 'games': 7,
-      'insanlar': 8, 'blog': 8, 'vlog': 8, 'people': 8,
-      'komedi': 9, 'mizah': 9, 'comedy': 9, 'funny': 9,
-      'eğlence': 10, 'eglence': 10, 'entertainment': 10,
-      'haberler': 11, 'haber': 11, 'gündem': 11, 'siyaset': 11, 'politika': 11, 'news': 11,
-      'nasıl yapılır': 12, 'pratik bilgiler': 12, 'how to': 12, 'howto': 12,
-      'eğitim': 13, 'egitim': 13, 'ders': 13, 'education': 13,
-      'aktivizm': 14, 'activism': 14,
-      'bilim': 15, 'teknoloji': 15, 'bilim ve teknoloji': 15, 'bilim & teknoloji': 15, 'science': 15, 'technology': 15, 'yazılım': 15,
-      'hayvanlar': 16, 'doğa': 16, 'animals': 16,
-      'çocuklar': 17, 'çocuk': 17, 'kids': 17,
-      'yemek': 18, 'mutfak': 18, 'food': 18, 'cooking': 18
+      müzik: 1,
+      music: 1,
+      film: 2,
+      filmler: 2,
+      films: 2,
+      sinema: 2,
+      cinema: 2,
+      araçlar: 3,
+      otomotiv: 3,
+      arabalar: 3,
+      vehicles: 3,
+      cars: 3,
+      sanat: 4,
+      art: 4,
+      spor: 5,
+      sports: 5,
+      futbol: 5,
+      football: 5,
+      seyahat: 6,
+      gezi: 6,
+      travel: 6,
+      travels: 6,
+      doğa: 6,
+      doga: 6,
+      oyun: 7,
+      oyunlar: 7,
+      gaming: 7,
+      games: 7,
+      insanlar: 8,
+      blog: 8,
+      vlog: 8,
+      people: 8,
+      komedi: 9,
+      mizah: 9,
+      comedy: 9,
+      funny: 9,
+      'komedi skeç gösterileri': 9,
+      'komedi skeç': 9,
+      'komedi skeçleri': 9,
+      skeç: 9,
+      eğlence: 10,
+      eglence: 10,
+      entertainment: 10,
+      haberler: 11,
+      haber: 11,
+      gündem: 11,
+      siyaset: 11,
+      politika: 11,
+      news: 11,
+      'nasıl yapılır': 12,
+      'pratik bilgiler': 12,
+      'how to': 12,
+      howto: 12,
+      eğitim: 13,
+      egitim: 13,
+      ders: 13,
+      education: 13,
+      aktivizm: 14,
+      activism: 14,
+      bilim: 15,
+      teknoloji: 15,
+      'bilim ve teknoloji': 15,
+      'bilim & teknoloji': 15,
+      science: 15,
+      technology: 15,
+      yazılım: 15,
+      hayvanlar: 16,
+      'evcil hayvanlar': 16,
+      evcil: 16,
+      animals: 16,
+      pets: 16,
+      çocuklar: 17,
+      çocuk: 17,
+      kids: 17,
+      yemek: 18,
+      mutfak: 18,
+      food: 18,
+      cooking: 18
     };
 
     for (const item of lines) {
@@ -216,9 +282,11 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
             url: '/videos/browse?isLive=true'
           });
         } else if (val.startsWith('sort=')) {
+          const sVal = val.split('=')[1];
+          const cleanKey = sVal.replace(/^-/, '');
           result.push({
             label,
-            key: 'sort_' + val.split('=')[1],
+            key: 'sort_' + cleanKey,
             url: `/videos/browse?${val}`
           });
         } else if (val.startsWith('search=')) {
@@ -243,6 +311,55 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
           key: 'live',
           url: '/videos/browse?isLive=true'
         });
+      } else if (lower === 'son yüklenenler' || lower === 'son yuklenenler' || lower === 'en yeniler') {
+        result.push({
+          label: item,
+          key: 'sort_publishedAt',
+          url: '/videos/browse?sort=-publishedAt'
+        });
+      } else if (
+        lower === 'izlenenler' ||
+        lower === 'en çok izlenenler' ||
+        lower === 'en cok izlenenler' ||
+        lower === 'popüler' ||
+        lower === 'populer'
+      ) {
+        result.push({
+          label: item,
+          key: 'sort_views',
+          url: '/videos/browse?sort=-views'
+        });
+      } else if (
+        lower === 'yeni öneriler' ||
+        lower === 'yeni oneriler' ||
+        lower === 'öneriler' ||
+        lower === 'oneriler' ||
+        lower === 'trendler' ||
+        lower === 'popülerler'
+      ) {
+        result.push({
+          label: item,
+          key: 'sort_hot',
+          url: '/videos/browse?sort=-hot'
+        });
+      } else if (lower === 'rap yapma' || lower === 'rap') {
+        result.push({
+          label: item,
+          key: 'search_rap',
+          url: '/search?search=rap'
+        });
+      } else if (lower === 'mixler' || lower === "mix'ler" || lower === 'mix') {
+        result.push({
+          label: item,
+          key: 'search_mix',
+          url: '/search?search=mix'
+        });
+      } else if (lower === 'podcastler' || lower === "podcast'ler" || lower === 'podcast') {
+        result.push({
+          label: item,
+          key: 'search_podcast',
+          url: '/search?search=podcast'
+        });
       } else if (categoryMap[lower] !== undefined) {
         const catId = categoryMap[lower];
         result.push({
@@ -253,7 +370,7 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       } else {
         result.push({
           label: item,
-          key: 'search_' + lower,
+          key: 'search_' + lower.replace(/[^a-z0-9_-]/gi, '_'),
           url: `/search?search=${encodeURIComponent(item)}`
         });
       }
@@ -300,7 +417,8 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       if (catsVal !== undefined && catsVal !== null && String(catsVal).trim() !== '') {
         rawHomeCategories = String(catsVal).trim();
       } else {
-        rawHomeCategories = 'Tümü, Müzik, Eğlence, Oyun, Haberler, Eğitim, Bilim & Teknoloji, Film, Spor, Canlı Yayınlar';
+        rawHomeCategories =
+          'Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler';
       }
       parsedHomeCategories = parseHomeCategories(rawHomeCategories);
     } catch (e) {}
@@ -830,7 +948,8 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
           ok: false,
           quotaExceeded: true,
           limit: guestImportLimit,
-          error: 'Kota Doldu: Misafir video indirme sınırına ulaştınız. Sınırsız video aktarımı, yorum yapabilme ve diğer tüm ayrıcalıklar için lütfen giriş yapın.'
+          error:
+            'Kota Doldu: Misafir video indirme sınırına ulaştınız. Sınırsız video aktarımı, yorum yapabilme ve diğer tüm ayrıcalıklar için lütfen giriş yapın.'
         });
       }
     }
