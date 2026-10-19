@@ -810,6 +810,42 @@ my-search-typeahead,
   transform: translateY(-1px) !important;
 }
 
+.yaktube-modal-chip.yaktube-recent-chip {
+  padding: 6px 10px 6px 14px !important;
+  gap: 8px !important;
+}
+
+.yaktube-recent-chip-text {
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.yaktube-recent-chip-delete {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+  margin-left: 2px !important;
+  padding: 0 !important;
+}
+
+.yaktube-recent-chip-delete:hover {
+  background: rgba(239, 68, 68, 0.35) !important;
+  color: #ff6b6b !important;
+  transform: scale(1.15) !important;
+}
+
 .yaktube-modal-hint-footer {
   display: flex !important;
   justify-content: space-between !important;

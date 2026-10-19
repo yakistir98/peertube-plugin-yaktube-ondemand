@@ -4354,18 +4354,52 @@ try {
       var q = query.trim();
       try {
         var list = getRecentSearches();
+        // Remove previous occurrence of the exact term (case-insensitive) and bubble it to the very top (#1)
         list = list.filter(function (item) {
           return item.toLowerCase() !== q.toLowerCase();
         });
         list.unshift(q);
-        if (list.length > 12) list = list.slice(0, 12);
+        if (list.length > 20) list = list.slice(0, 20);
         localStorage.setItem('yaktube_recent_searches', JSON.stringify(list));
       } catch (e) {}
 
       // If user is logged in and sync is active, sync with YakNet account
       if (isAccountSyncEnabled()) {
-        callCloudSearchHistory('POST', '', { query: q, device_name: 'YakTube Web' });
+        callCloudSearchHistory('POST', '', { query: q, device_name: 'YakTube Web' }, function (data) {
+          if (data && data.status === 'success' && Array.isArray(data.history) && data.history.length > 0) {
+            localStorage.setItem('yaktube_recent_searches', JSON.stringify(data.history));
+          }
+        });
       }
+    }
+
+    function deleteRecentSearch(targetQuery) {
+      if (!targetQuery) return;
+      var q = targetQuery.trim();
+      try {
+        var list = getRecentSearches();
+        list = list.filter(function (item) {
+          return item.toLowerCase() !== q.toLowerCase();
+        });
+        localStorage.setItem('yaktube_recent_searches', JSON.stringify(list));
+      } catch (e) {}
+
+      if (isAccountSyncEnabled()) {
+        callCloudSearchHistory('DELETE', '?query=' + encodeURIComponent(q), { query: q }, function (data) {
+          if (data && data.status === 'success' && Array.isArray(data.history)) {
+            localStorage.setItem('yaktube_recent_searches', JSON.stringify(data.history));
+          }
+        });
+      }
+
+      var modal = document.getElementById('yaktube-full-search-modal');
+      var filterVal = '';
+      if (modal) {
+        var inp = modal.querySelector('#yaktube-modal-input');
+        if (inp) filterVal = inp.value;
+      }
+      renderDynamicSearchChips(filterVal);
+      announce('"' + q + '" araması geçmişten silindi.');
     }
 
     function clearRecentSearches() {
@@ -4406,7 +4440,7 @@ try {
     captureUrlSearchQuery();
     window.addEventListener('popstate', captureUrlSearchQuery);
 
-    function renderDynamicSearchChips() {
+    function renderDynamicSearchChips(filterText) {
       var modal = document.getElementById('yaktube-full-search-modal');
       if (!modal) return;
 
@@ -4416,12 +4450,28 @@ try {
       var recent = getRecentSearches();
       var loggedIn = isUserLoggedIn();
       var syncEnabled = isAccountSyncEnabled();
+      var filter = (filterText || '').trim().toLowerCase();
+
+      var displayedRecent = recent;
+      var displayedPopular = popularTrendingQueries;
+
+      if (filter.length > 0) {
+        displayedRecent = recent.filter(function (term) {
+          return term.toLowerCase().includes(filter);
+        });
+        displayedPopular = popularTrendingQueries.filter(function (item) {
+          return item.q.toLowerCase().includes(filter) || item.title.toLowerCase().includes(filter);
+        });
+      }
+
       var html = '';
 
       // 1. Recent searches section
       html +=
         '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">' +
-        '<div class="yaktube-modal-section-title" style="margin-bottom: 0;">🕒 Son Aramalarınız</div>' +
+        '<div class="yaktube-modal-section-title" style="margin-bottom: 0;">🕒 ' +
+        (filter.length > 0 ? 'Eşleşen Son Aramalarınız' : 'Son Aramalarınız') +
+        '</div>' +
         '<div style="display: flex; align-items: center; gap: 8px;">';
 
       if (loggedIn) {
@@ -4448,52 +4498,82 @@ try {
           '<span style="font-size: 11px; color: #94a3b8; background: #1e293b; border-radius: 6px; padding: 2px 8px;" title="Misafir modundasınız, aramalar sadece bu cihazda saklanır">🔒 Bu Cihazda</span>';
       }
 
-      if (recent.length > 0) {
+      if (recent.length > 0 && filter.length === 0) {
         html +=
-          '<button id="yaktube-clear-recent-btn" style="background: transparent; border: none; color: #ff8f37; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline;" aria-label="Arama geçmişini temizle">Geçmişi Temizle</button>';
+          '<button id="yaktube-clear-recent-btn" style="background: transparent; border: none; color: #ff8f37; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline;" aria-label="Tüm arama geçmişini temizle">Geçmişi Temizle</button>';
       }
 
       html += '</div></div>';
 
-      if (recent.length > 0) {
+      if (displayedRecent.length > 0) {
         html += '<div class="yaktube-modal-chips-grid" style="margin-bottom: 18px;">';
-        recent.forEach(function (term) {
+        displayedRecent.forEach(function (term) {
           var safeTerm = term.replace(/"/g, '&quot;');
           html +=
-            '<button class="yaktube-modal-chip yaktube-recent-chip" data-query="' +
+            '<div class="yaktube-modal-chip yaktube-recent-chip" data-query="' +
             safeTerm +
-            '" aria-label="Son arama: ' +
+            '" title="' +
+            safeTerm +
+            ' için ara">' +
+            '<span class="yaktube-recent-chip-text" data-query="' +
             safeTerm +
             '">🕒 ' +
             safeTerm +
+            '</span>' +
+            '<button type="button" class="yaktube-recent-chip-delete" data-delete-query="' +
+            safeTerm +
+            '" title="Bu aramayı geçmişten kaldır" aria-label="' +
+            safeTerm +
+            ' aramasını geçmişten kaldır">✕</button>' +
+            '</div>';
+        });
+        html += '</div>';
+      } else if (filter.length > 0) {
+        html +=
+          '<div style="font-size: 12px; color: #94a3b8; margin-bottom: 14px; font-style: italic;">Geçmişte "' +
+          filter.replace(/"/g, '&quot;') +
+          '" ile eşleşen kayıt bulunamadı.</div>';
+      }
+
+      // 2. Popular & Trending searches section
+      if (displayedPopular.length > 0) {
+        html +=
+          '<div class="yaktube-modal-section-title">🔥 ' +
+          (filter.length > 0 ? 'Önerilen Aramalar' : 'Hızlı ve Popüler Aramalar') +
+          '</div>' +
+          '<div class="yaktube-modal-chips-grid">';
+
+        displayedPopular.forEach(function (item) {
+          var safeQ = item.q.replace(/"/g, '&quot;');
+          html +=
+            '<button class="yaktube-modal-chip" data-query="' +
+            safeQ +
+            '" aria-label="Popüler arama: ' +
+            safeQ +
+            '">' +
+            item.title +
             '</button>';
         });
         html += '</div>';
       }
 
-      // 2. Popular & Trending searches section
-      html +=
-        '<div class="yaktube-modal-section-title">🔥 Hızlı ve Popüler Aramalar</div>' +
-        '<div class="yaktube-modal-chips-grid">';
-
-      popularTrendingQueries.forEach(function (item) {
-        var safeQ = item.q.replace(/"/g, '&quot;');
-        html +=
-          '<button class="yaktube-modal-chip" data-query="' +
-          safeQ +
-          '" aria-label="Popüler arama: ' +
-          safeQ +
-          '">' +
-          item.title +
-          '</button>';
-      });
-      html += '</div>';
-
       container.innerHTML = html;
 
       // Attach click events
+      container.querySelectorAll('.yaktube-recent-chip-delete').forEach(function (delBtn) {
+        delBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var delTerm = delBtn.getAttribute('data-delete-query');
+          deleteRecentSearch(delTerm);
+        });
+      });
+
       container.querySelectorAll('.yaktube-modal-chip').forEach(function (chip) {
-        chip.addEventListener('click', function () {
+        chip.addEventListener('click', function (e) {
+          if (e.target && e.target.classList.contains('yaktube-recent-chip-delete')) {
+            return;
+          }
           var query = chip.getAttribute('data-query');
           var inp = modal.querySelector('#yaktube-modal-input');
           if (inp) inp.value = query;
@@ -4576,19 +4656,22 @@ try {
       var voiceBtn = modal.querySelector('#yaktube-modal-voice-btn');
       var micPulseBtn = modal.querySelector('#yaktube-modal-mic-pulse');
 
-      // Input typing & clear
+      // Input typing & live search history filtering
       inp.addEventListener('input', function () {
-        if (inp.value && inp.value.trim().length > 0) {
+        var val = (inp.value || '').trim();
+        if (val.length > 0) {
           clearBtn.style.display = 'inline-flex';
         } else {
           clearBtn.style.display = 'none';
         }
+        renderDynamicSearchChips(val);
       });
 
       clearBtn.addEventListener('click', function () {
         inp.value = '';
         clearBtn.style.display = 'none';
         inp.focus();
+        renderDynamicSearchChips('');
         announce('Arama metni temizlendi.');
       });
 
@@ -4630,14 +4713,6 @@ try {
           e.preventDefault();
           closeFullSearchModal();
         }
-      });
-
-      // Chips click
-      modal.querySelectorAll('.yaktube-modal-chip').forEach(function (chip) {
-        chip.addEventListener('click', function () {
-          var query = chip.getAttribute('data-query');
-          executeSearch(query);
-        });
       });
 
       // Voice button click

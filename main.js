@@ -1340,13 +1340,20 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       if (q && q.length >= 2) {
         const filtered = currentList.filter(item => String(item).toLowerCase() !== q.toLowerCase());
         filtered.unshift(q);
-        store[userKey] = filtered.slice(0, 12);
+        store[userKey] = filtered.slice(0, 20);
         writeHistoryStore(store);
       }
       return res.json({ status: 'success', history: store[userKey] || currentList });
     }
 
     if (req.method === 'DELETE') {
+      const target = ((req.body && req.body.query) || (req.query && req.query.query) || '').trim();
+      if (target) {
+        const filtered = currentList.filter(item => String(item).toLowerCase() !== target.toLowerCase());
+        store[userKey] = filtered;
+        writeHistoryStore(store);
+        return res.json({ status: 'success', history: filtered });
+      }
       delete store[userKey];
       writeHistoryStore(store);
       return res.json({ status: 'success', history: [] });
