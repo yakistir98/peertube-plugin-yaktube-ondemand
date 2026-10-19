@@ -607,6 +607,20 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
     return false;
   }
 
+  function normalizeTitleForMatch(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&amp;/g, '&')
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/[\u2010-\u2015]/g, '-')
+      .replace(/\s*[\(\[](official|video|music|audio|clip|4k|hd|lyrics|sözleri|visualizer)[^\)\]]*[\)\]]/gi, '')
+      .replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLocaleLowerCase('tr');
+  }
+
   // Helper to enrich YouTube results with existing local PeerTube videos via DB
   async function enrichResultsWithLocalStatus(results) {
     try {
@@ -643,10 +657,18 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
           };
         }
 
-        const normalizedTitle = (item.title || '').toLowerCase().trim();
+        const rawItemTitle = (item.title || '').toLowerCase().trim();
+        const normItemTitle = normalizeTitleForMatch(item.title);
+
         const matchedLocal = localVideos.find(lv => {
-          const lvName = (lv.name || '').toLowerCase().trim();
-          return lvName === normalizedTitle || (lvName.length > 5 && normalizedTitle.includes(lvName));
+          const rawLv = (lv.name || '').toLowerCase().trim();
+          if (rawLv === rawItemTitle) return true;
+          const normLv = normalizeTitleForMatch(lv.name);
+          return (
+            normLv &&
+            (normLv === normItemTitle ||
+              (normLv.length > 5 && (normItemTitle.includes(normLv) || normLv.includes(normItemTitle))))
+          );
         });
 
         if (matchedLocal) {
