@@ -5935,3 +5935,11 @@ try {
 } catch (err) {
   console.error('[YakTube] Safe catch error:', err);
 }
+
+// PeerTube Plugin Client Hook Registration
+export async function register({ registerHook, peertubeHelpers } = {}) {
+  return true;
+}
+
+export { register as registerClient };
+export default register;
