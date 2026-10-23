@@ -3679,6 +3679,18 @@ try {
           })
         })
           .then(function (data) {
+            if (data && data.blocked) {
+              hideModal();
+              btn.disabled = false;
+              btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
+              showModal(
+                '🛡️ Çocuk ve Aile Güvenliği',
+                data.error ||
+                  "Bu video içeriği, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince YakTube'a aktarılamaz."
+              );
+              return;
+            }
+
             if (data && data.quotaExceeded) {
               hideModal();
               btn.disabled = false;
@@ -3899,6 +3911,24 @@ try {
           var localData = responses[1] || {};
           if (typeof ytData.guestImportLimit === 'number') {
             cachedGuestImportLimit = ytData.guestImportLimit;
+          }
+
+          if (ytData && ytData.blocked) {
+            var safetyMsg =
+              ytData.message ||
+              'Bu arama terimi veya içerik, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince filtrelenmiştir.';
+            container.innerHTML =
+              '<div class="yaktube-header" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.08); padding: 18px 20px; border-radius: 8px; margin-bottom: 24px;">' +
+              '<div class="yaktube-header-left">' +
+              '<span class="yaktube-badge" style="background:#ef4444; color:#fff; font-weight:700;">🛡️ Çocuk ve Aile Güvenliği Koruması</span>' +
+              '<h2 class="yaktube-title-h3" style="margin:8px 0 4px; font-size:1.15rem; color:#f87171;">Arama Filtrelendi</h2>' +
+              '<p style="margin:0; font-size:0.95rem; color:#cbd5e1;">' +
+              escapeHtml(safetyMsg) +
+              '</p>' +
+              '</div>' +
+              '</div>';
+            announce(safetyMsg, true);
+            return;
           }
 
           var rawYtResults = ytData.results || [];

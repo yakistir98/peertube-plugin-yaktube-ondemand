@@ -97,6 +97,87 @@ function postInnerTubeJSON(url, data) {
 
 let pruneIntervalTimer = null;
 
+const DEFAULT_BLOCKED_KEYWORDS = [
+  'porn',
+  'porno',
+  'sex',
+  'seksi',
+  'sexy',
+  'strip',
+  'striptease',
+  'bikini',
+  'lingerie',
+  'see-through',
+  'sheer',
+  'babydoll',
+  'gravure',
+  'nude',
+  'nudes',
+  'nudist',
+  'erotik',
+  'erotic',
+  'erotizm',
+  'çıplak',
+  'ciplak',
+  'soyunma',
+  'soyun',
+  'sikiş',
+  'sikis',
+  'amcık',
+  'amcik',
+  'yarak',
+  'yarrak',
+  'penis',
+  'vagina',
+  'vajina',
+  'mastürbasyon',
+  'masturbasyon',
+  'adult',
+  '+18',
+  'nsfw',
+  'xxx',
+  'onlyfans',
+  'sissy',
+  'seduce',
+  'seduces',
+  'seducing',
+  'seductress',
+  'milf',
+  'deepthroat',
+  'blowjob',
+  'anal',
+  'hentai',
+  'boob',
+  'boobs',
+  'uyuşturucu',
+  'uyusturucu',
+  'esrar',
+  'kokain',
+  'eroin',
+  'bonzai',
+  'bahis',
+  'kumar',
+  'bet',
+  'casino'
+];
+
+function isContentBlocked(text, list = DEFAULT_BLOCKED_KEYWORDS) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.toLowerCase().replace(/['\"\-_\/\\.,;:\(\)\[\]#!\?]/g, ' ');
+  const words = clean.split(/\s+/).filter(Boolean);
+
+  for (const item of list) {
+    const target = item.trim().toLowerCase();
+    if (!target) continue;
+    if (target.includes(' ')) {
+      if (clean.includes(target)) return true;
+    } else {
+      if (words.includes(target)) return true;
+    }
+  }
+  return false;
+}
+
 async function register({ getRouter, registerSetting, settingsManager, peertubeHelpers, logger }) {
   const router = getRouter();
 
@@ -104,8 +185,33 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
   let maxDiskUsagePercent = 85;
   let customChannelId = '';
   let customYtDlpPath = '';
+  let safeSearchEnabled = true;
+  let blockedKeywordsList = [...DEFAULT_BLOCKED_KEYWORDS];
 
   if (typeof registerSetting === 'function') {
+    registerSetting({
+      name: 'safe-search-enabled',
+      label: 'Güvenli Okul & Aile Araması (SafeSearch)',
+      type: 'select',
+      options: [
+        { label: 'Açık (Önerilen - Katı Çocuk ve Aile Filtresi)', value: 'true' },
+        { label: 'Kapalı (Filtresiz)', value: 'false' }
+      ],
+      description: 'Açık olduğunda arama sonuçlarında katı çocuk ve aile güvenliği filtresi uygulanır.',
+      private: false,
+      default: 'true'
+    });
+
+    registerSetting({
+      name: 'blocked-keywords',
+      label: 'Yasaklı / Filtrelenecek Kelimeler (Çocuk & Aile Güvenliği)',
+      type: 'input-textarea',
+      description:
+        'Arama ve video aktarma işlemlerinde filtrelenecek anahtar kelimeler listesi. Virgülle veya alt alta yazabilirsiniz. Bu kelimeleri içeren aramalar engellenir ve uygunsuz videolar sisteme aktarılamaz.',
+      private: false,
+      default: DEFAULT_BLOCKED_KEYWORDS.join(', ')
+    });
+
     registerSetting({
       name: 'guest-import-limit',
       label: 'Misafir Video İndirme Sınırı (Kota)',
@@ -421,6 +527,24 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
           'Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler';
       }
       parsedHomeCategories = parseHomeCategories(rawHomeCategories);
+    } catch (e) {}
+
+    try {
+      const safeVal = await settingsManager.getSetting('safe-search-enabled');
+      if (safeVal !== undefined && safeVal !== null) {
+        safeSearchEnabled = String(safeVal).trim() !== 'false';
+      }
+    } catch (e) {}
+
+    try {
+      const wordsVal = await settingsManager.getSetting('blocked-keywords');
+      if (wordsVal && typeof wordsVal === 'string' && wordsVal.trim() !== '') {
+        const list = wordsVal
+          .split(/[\n,]+/)
+          .map(w => w.trim().toLowerCase())
+          .filter(Boolean);
+        if (list.length > 0) blockedKeywordsList = list;
+      }
     } catch (e) {}
   }
 
@@ -843,6 +967,8 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       ok: true,
       guestImportLimit,
       maxDiskUsagePercent,
+      safeSearchEnabled,
+      blockedKeywords: blockedKeywordsList,
       categories: parsedHomeCategories
     });
   });
@@ -887,9 +1013,22 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
       return res.json({ results: [], guestImportLimit });
     }
 
+    if (safeSearchEnabled && isContentBlocked(query, blockedKeywordsList)) {
+      return res.json({
+        results: [],
+        blocked: true,
+        guestImportLimit,
+        message:
+          'Bu arama terimi veya içerik, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince filtrelenmiştir.'
+      });
+    }
+
     const cached = getCached(query);
     if (cached) {
-      const enriched = await enrichResultsWithLocalStatus(cached);
+      const filteredCached = safeSearchEnabled
+        ? cached.filter(e => !isContentBlocked(e.title, blockedKeywordsList))
+        : cached;
+      const enriched = await enrichResultsWithLocalStatus(filteredCached);
       return res.json({ results: enriched, cached: true, guestImportLimit });
     }
 
@@ -911,7 +1050,7 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
         }
         const json = JSON.parse(rawStr.substring(startIdx, endIdx + 1));
         const entries = json.entries || [];
-        const rawResults = entries
+        let rawResults = entries
           .filter(e => e && e.id)
           .map(e => {
             const duration = e.duration || 0;
@@ -939,6 +1078,10 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
             };
           });
 
+        if (safeSearchEnabled) {
+          rawResults = rawResults.filter(e => !isContentBlocked(e.title, blockedKeywordsList));
+        }
+
         setCache(query, rawResults);
         const enrichedResults = await enrichResultsWithLocalStatus(rawResults);
         return res.json({ results: enrichedResults, cached: false, guestImportLimit });
@@ -958,6 +1101,18 @@ async function register({ getRouter, registerSetting, settingsManager, peertubeH
     const { targetUrl, title, channelId, isAuthenticated, guestImportCount } = req.body || {};
     if (!targetUrl || (!targetUrl.includes('youtube.com') && !targetUrl.includes('youtu.be'))) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+
+    if (
+      safeSearchEnabled &&
+      (isContentBlocked(title, blockedKeywordsList) || isContentBlocked(targetUrl, blockedKeywordsList))
+    ) {
+      return res.status(403).json({
+        ok: false,
+        blocked: true,
+        error:
+          "Bu video içeriği, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince YakTube'a aktarılamaz."
+      });
     }
 
     const isLoggedUser = await isRequestAuthenticated(req, res, isAuthenticated);
