@@ -1016,15 +1016,18 @@ try {
             return;
           }
 
-          if (img.src && (img.src.includes('logo') || img.className.includes('logo'))) {
-            img.setAttribute('alt', getInstanceName() + ' Logo');
-            return;
-          }
-
           var parentLink = img.closest('a');
           if (parentLink && parentLink.textContent && parentLink.textContent.trim().length > 0) {
             img.setAttribute('alt', '');
-          } else if (parentLink && parentLink.getAttribute('title')) {
+            return;
+          }
+
+          if (img.src && (img.src.includes('logo') || img.className.includes('logo'))) {
+            img.setAttribute('alt', getInstanceName());
+            return;
+          }
+
+          if (parentLink && parentLink.getAttribute('title')) {
             img.setAttribute('alt', parentLink.getAttribute('title'));
           } else {
             img.setAttribute('alt', 'Görsel');
