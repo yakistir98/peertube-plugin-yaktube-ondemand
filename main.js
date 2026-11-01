@@ -178,8 +178,27 @@ function isContentBlocked(text, list = DEFAULT_BLOCKED_KEYWORDS) {
   return false;
 }
 
-async function register({ getRouter, registerSetting, settingsManager, peertubeHelpers, logger }) {
+async function register({ registerHook, getRouter, registerSetting, settingsManager, peertubeHelpers, logger }) {
   const router = getRouter();
+
+  // YakTube Bildirim Filtresi: Başarılı video içe aktarımları (type 7) bildirim kutusunu doldurmasın,
+  // Sadece başarısız olanlar (type 8 / MY_VIDEO_IMPORT_ERROR) bildirim olarak düşsün
+  if (typeof registerHook === 'function') {
+    registerHook({
+      target: 'filter:notifier.notification.enabled.result',
+      handler: async (result, { notification }) => {
+        if (notification && (notification.type === 7 || notification.type === 'my-video-import-success')) {
+          return {
+            webNotificationEnabled: false,
+            emailNotificationEnabled: false
+          };
+        }
+        return result;
+      }
+    });
+    if (logger) logger.info('[YakTube OnDemand] Registered filter:notifier.notification.enabled.result (suppressing successful import notifications).');
+  }
+
 
   let guestImportLimit = 5;
   let maxDiskUsagePercent = 85;

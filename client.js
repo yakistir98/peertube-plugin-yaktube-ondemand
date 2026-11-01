@@ -1963,6 +1963,15 @@ try {
     }
 
     function injectControlBarSeekButtons(playerWrapper) {
+      // A11y: Video.js büyük oynat butonunu ve denetim çubuğu butonlarını ekran okuyuculara erişilebilir kıl
+      // big-play-button custom label removed per user preference
+      var playBtn = (playerWrapper || document).querySelector('.vjs-play-control');
+      if (playBtn && !playBtn.hasAttribute('data-yaktube-a11y-label')) {
+        playBtn.setAttribute('data-yaktube-a11y-label', 'true');
+        var videoEl = getVideoElement();
+        var isPaused = videoEl ? videoEl.paused : true;
+        playBtn.setAttribute('aria-label', isPaused ? 'Oynat (Boşluk veya K)' : 'Duraklat (Boşluk veya K)');
+      }
       var controlBar = (playerWrapper || document).querySelector('.vjs-control-bar');
       if (!controlBar) return;
 
@@ -2202,7 +2211,7 @@ try {
             }
 
             // Left Arrow or J: Rewind 10s
-            if (e.key === 'ArrowLeft' || e.key === 'j' || e.key === 'J') {
+            if ((e.key === 'ArrowLeft' && !e.altKey) || e.key === 'j' || e.key === 'J') {
               e.preventDefault();
               e.stopPropagation();
               video.currentTime = Math.max(0, video.currentTime - 10);
@@ -2212,7 +2221,7 @@ try {
             }
 
             // Right Arrow or L: Forward 10s
-            if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
+            if ((e.key === 'ArrowRight' && !e.altKey) || e.key === 'l' || e.key === 'L') {
               e.preventDefault();
               e.stopPropagation();
               video.currentTime = Math.min(video.duration || 999999, video.currentTime + 10);
@@ -2352,6 +2361,7 @@ try {
 
       bar.innerHTML =
         '<span class="yaktube-player-bar-label">🛠️ Video Araçları:</span>' +
+        '<button id="yaktube-bar-back-btn" class="yaktube-player-action-btn" aria-label="Önceki Sayfaya Geri Dön (Alt+Sol Ok)" title="Önceki Sayfaya Geri Dön (Alt+Sol Ok)">⬅️ Geri Dön</button>' +
         '<button id="yaktube-bar-speed-btn" class="yaktube-player-action-btn" aria-label="Oynatma Hızını Değiştir (Alt+.)">⚡ Hız</button>' +
         '<button id="yaktube-bar-sleep-btn" class="yaktube-player-action-btn" aria-label="Uyku Zamanlayıcısı (Alt+U)">⏱️ Uyku</button>' +
         '<button id="yaktube-bar-qr-btn" class="yaktube-player-action-btn" aria-label="Telefonda Devam Et / QR Kod (Alt+Q)">📱 Telefonda Aç</button>' +
@@ -2378,6 +2388,17 @@ try {
       }
 
       // Attach button actions
+      var backBtn = bar.querySelector('#yaktube-bar-back-btn');
+      if (backBtn) {
+        backBtn.addEventListener('click', function () {
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = '/videos/overview';
+          }
+        });
+      }
+
       bar.querySelector('#yaktube-bar-speed-btn').addEventListener('click', function () {
         adjustPlaybackSpeed(true);
       });
@@ -2544,11 +2565,11 @@ try {
         announce('10 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));
       }
       // Seek 5s Back / Forward (ArrowLeft / ArrowRight or Alt+Left/Right)
-      else if (e.key === 'ArrowLeft' || (alt && e.key === 'ArrowLeft')) {
+      else if (e.key === 'ArrowLeft' && !alt) {
         e.preventDefault();
         video.currentTime = Math.max(0, video.currentTime - 5);
         announce('5 saniye geri sarıldı. Konum: ' + formatTime(video.currentTime));
-      } else if (e.key === 'ArrowRight' || (alt && e.key === 'ArrowRight')) {
+      } else if (e.key === 'ArrowRight' && !alt) {
         e.preventDefault();
         video.currentTime = Math.min(video.duration || 99999, video.currentTime + 5);
         announce('5 saniye ileri sarıldı. Konum: ' + formatTime(video.currentTime));

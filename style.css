@@ -1763,3 +1763,29 @@ my-date-toggle .date-toggle:focus-visible {
   background-color: rgba(255, 143, 55, 0.15) !important;
   outline: 2px solid #ff8f37 !important;
 }
+
+
+/* === YakTube WCAG 2.1 AAA Video Player Accessibility: Keep Controls Accessible === */
+
+/* 1. Video duraklatıldığında veya klavye/ekran okuyucu odaklandığında denetim çubuğunu görünür tut */
+.video-js.vjs-paused .vjs-control-bar,
+.video-js:focus-within .vjs-control-bar,
+.video-js .vjs-control-bar:focus-within,
+.video-js.vjs-user-inactive.vjs-paused .vjs-control-bar {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: flex !important;
+  pointer-events: auto !important;
+}
+
+/* 2. Büyük merkez oynatma düğmesi PeerTube varsayılanında bırakıldı */
+
+/* 3. Tüm Video.js düğmelerinin klavye odağını belirgin kıl */
+.video-js .vjs-control-bar .vjs-button:focus,
+.video-js .vjs-control-bar .vjs-button:focus-visible,
+.video-js .vjs-big-play-button:focus,
+.video-js .vjs-big-play-button:focus-visible {
+  outline: 3px solid #ff8f37 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 10px rgba(255, 143, 55, 0.8) !important;
+}
