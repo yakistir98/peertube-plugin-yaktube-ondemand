@@ -1079,432 +1079,463 @@ try {
     // 3. Screen-Reader & Turkish Q Optimized Shortcuts & Player Bar (v1.4.1)
     // YakTube NLnet WCAG 2.2 AAA & Privacy Suite Modules
 
-// ============================================================================
-// 1. WCAG 2.2 AAA Focus Trap & Modal Management
-// ============================================================================
-var lastActiveElementBeforeModal = null;
+    // ============================================================================
+    // 1. WCAG 2.2 AAA Focus Trap & Modal Management
+    // ============================================================================
+    var lastActiveElementBeforeModal = null;
 
-function trapFocusInModal(modalEl) {
-  if (!modalEl) return;
-  var focusableElements = modalEl.querySelectorAll(
-    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-  );
-  if (!focusableElements.length) return;
-  var firstFocusable = focusableElements[0];
-  var lastFocusable = focusableElements[focusableElements.length - 1];
+    function trapFocusInModal(modalEl) {
+      if (!modalEl) return;
+      var focusableElements = modalEl.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusableElements.length) return;
+      var firstFocusable = focusableElements[0];
+      var lastFocusable = focusableElements[focusableElements.length - 1];
 
-  function handleKeydown(e) {
-    if (e.key !== 'Tab') return;
-    if (e.shiftKey) {
-      if (document.activeElement === firstFocusable) {
-        e.preventDefault();
-        lastFocusable.focus();
+      function handleKeydown(e) {
+        if (e.key !== 'Tab') return;
+        if (e.shiftKey) {
+          if (document.activeElement === firstFocusable) {
+            e.preventDefault();
+            lastFocusable.focus();
+          }
+        } else {
+          if (document.activeElement === lastFocusable) {
+            e.preventDefault();
+            firstFocusable.focus();
+          }
+        }
       }
-    } else {
-      if (document.activeElement === lastFocusable) {
-        e.preventDefault();
+
+      modalEl.removeEventListener('keydown', modalEl._trapHandler);
+      modalEl._trapHandler = handleKeydown;
+      modalEl.addEventListener('keydown', handleKeydown);
+      setTimeout(function () {
         firstFocusable.focus();
+      }, 50);
+    }
+
+    function recordFocusBeforeModal() {
+      lastActiveElementBeforeModal = document.activeElement;
+    }
+
+    function restoreFocusAfterModal() {
+      if (lastActiveElementBeforeModal && typeof lastActiveElementBeforeModal.focus === 'function') {
+        try {
+          lastActiveElementBeforeModal.focus();
+        } catch (e) {}
       }
     }
-  }
 
-  modalEl.removeEventListener('keydown', modalEl._trapHandler);
-  modalEl._trapHandler = handleKeydown;
-  modalEl.addEventListener('keydown', handleKeydown);
-  setTimeout(function () {
-    firstFocusable.focus();
-  }, 50);
-}
+    // ============================================================================
+    // 2. Audio-Only & Screen Blank Mode (NLnet Privacy & Bandwidth Shield)
+    // ============================================================================
+    var isAudioOnlyMode = false;
+    var wakeLockSentinel = null;
 
-function recordFocusBeforeModal() {
-  lastActiveElementBeforeModal = document.activeElement;
-}
-
-function restoreFocusAfterModal() {
-  if (lastActiveElementBeforeModal && typeof lastActiveElementBeforeModal.focus === 'function') {
-    try {
-      lastActiveElementBeforeModal.focus();
-    } catch (e) {}
-  }
-}
-
-// ============================================================================
-// 2. Audio-Only & Screen Blank Mode (NLnet Privacy & Bandwidth Shield)
-// ============================================================================
-var isAudioOnlyMode = false;
-var wakeLockSentinel = null;
-
-async function requestScreenWakeLock() {
-  try {
-    if ('wakeLock' in navigator) {
-      wakeLockSentinel = await navigator.wakeLock.request('screen');
-      wakeLockSentinel.addEventListener('release', function () {
-        wakeLockSentinel = null;
-      });
+    async function requestScreenWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          wakeLockSentinel.addEventListener('release', function () {
+            wakeLockSentinel = null;
+          });
+        }
+      } catch (err) {
+        console.warn('[YakTube] WakeLock error:', err);
+      }
     }
-  } catch (err) {
-    console.warn('[YakTube] WakeLock error:', err);
-  }
-}
 
-function releaseScreenWakeLock() {
-  if (wakeLockSentinel) {
-    wakeLockSentinel.release().catch(function () {});
-    wakeLockSentinel = null;
-  }
-}
+    function releaseScreenWakeLock() {
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(function () {});
+        wakeLockSentinel = null;
+      }
+    }
 
-function toggleAudioOnlyMode() {
-  var video = getVideoElement();
-  if (!video) {
-    announce('Aktif video bulunamadı.');
-    return;
-  }
+    function toggleAudioOnlyMode() {
+      var video = getVideoElement();
+      if (!video) {
+        announce('Aktif video bulunamadı.');
+        return;
+      }
 
-  isAudioOnlyMode = !isAudioOnlyMode;
-  document.body.classList.toggle('yaktube-audio-only-active', isAudioOnlyMode);
+      isAudioOnlyMode = !isAudioOnlyMode;
+      document.body.classList.toggle('yaktube-audio-only-active', isAudioOnlyMode);
 
-  var overlay = document.getElementById('yaktube-audio-blank-overlay');
-  var audioBtn = document.getElementById('yaktube-bar-audio-btn');
+      var overlay = document.getElementById('yaktube-audio-blank-overlay');
+      var audioBtn = document.getElementById('yaktube-bar-audio-btn');
 
-  if (isAudioOnlyMode) {
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'yaktube-audio-blank-overlay';
-      overlay.className = 'yaktube-audio-blank-overlay';
-      overlay.setAttribute('role', 'region');
-      overlay.setAttribute('aria-label', 'Yalnızca Ses ve Ekran Karartma Modu');
-      overlay.innerHTML =
-        '<div class="yaktube-audio-blank-content">' +
-          '<div style="font-size:48px; margin-bottom:12px;">📻</div>' +
-          '<h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#ff8f37;">Yalnızca Ses Modu Aktif</h3>' +
-          '<p style="margin:0 0 16px 0; font-size:14px; color:#aaa; max-width:380px;">Ekran pil ve veri tasarrufu için karartıldı. Arka planda çalma desteklenir.</p>' +
-          '<div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">' +
+      if (isAudioOnlyMode) {
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'yaktube-audio-blank-overlay';
+          overlay.className = 'yaktube-audio-blank-overlay';
+          overlay.setAttribute('role', 'region');
+          overlay.setAttribute('aria-label', 'Yalnızca Ses ve Ekran Karartma Modu');
+          overlay.innerHTML =
+            '<div class="yaktube-audio-blank-content">' +
+            '<div style="font-size:48px; margin-bottom:12px;">📻</div>' +
+            '<h3 style="margin:0 0 8px 0; font-size:20px; font-weight:700; color:#ff8f37;">Yalnızca Ses Modu Aktif</h3>' +
+            '<p style="margin:0 0 16px 0; font-size:14px; color:#aaa; max-width:380px;">Ekran pil ve veri tasarrufu için karartıldı. Arka planda çalma desteklenir.</p>' +
+            '<div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">' +
             '<button id="yaktube-exit-audio-btn" class="yaktube-audio-action-btn" aria-label="Görüntüyü Aç ve Ses Modundan Çık">🎬 Görüntüyü Aç (Alt+O)</button>' +
             '<button id="yaktube-toggle-play-audio-btn" class="yaktube-audio-action-btn" aria-label="Oynat veya Duraklat">⏯️ Oynat / Duraklat (Boşluk)</button>' +
-          '</div>' +
-        '</div>';
+            '</div>' +
+            '</div>';
 
-      var exitBtn = overlay.querySelector('#yaktube-exit-audio-btn');
-      if (exitBtn) {
-        exitBtn.addEventListener('click', toggleAudioOnlyMode);
-      }
-      var togglePlayBtn = overlay.querySelector('#yaktube-toggle-play-audio-btn');
-      if (togglePlayBtn) {
-        togglePlayBtn.addEventListener('click', function () {
-          var v = getVideoElement();
-          if (v) {
-            if (v.paused) v.play(); else v.pause();
+          var exitBtn = overlay.querySelector('#yaktube-exit-audio-btn');
+          if (exitBtn) {
+            exitBtn.addEventListener('click', toggleAudioOnlyMode);
           }
-        });
+          var togglePlayBtn = overlay.querySelector('#yaktube-toggle-play-audio-btn');
+          if (togglePlayBtn) {
+            togglePlayBtn.addEventListener('click', function () {
+              var v = getVideoElement();
+              if (v) {
+                if (v.paused) v.play();
+                else v.pause();
+              }
+            });
+          }
+          document.body.appendChild(overlay);
+        }
+        overlay.style.display = 'flex';
+        requestScreenWakeLock();
+        if (audioBtn) {
+          audioBtn.classList.add('active');
+          audioBtn.setAttribute('aria-pressed', 'true');
+        }
+        announce(
+          'Yalnızca ses modu açıldı. Ekran karartıldı, pil ve veri tasarrufu aktif. Çıkmak için Alt+O tuşuna basın.'
+        );
+        showQuickToast('📻 Yalnızca Ses Modu Açık');
+      } else {
+        if (overlay) overlay.style.display = 'none';
+        releaseScreenWakeLock();
+        if (audioBtn) {
+          audioBtn.classList.remove('active');
+          audioBtn.setAttribute('aria-pressed', 'false');
+        }
+        announce('Yalnızca ses modu kapatıldı. Görüntü normale döndü.');
+        showQuickToast('🎬 Normal Görüntü Modu');
       }
-      document.body.appendChild(overlay);
     }
-    overlay.style.display = 'flex';
-    requestScreenWakeLock();
-    if (audioBtn) {
-      audioBtn.classList.add('active');
-      audioBtn.setAttribute('aria-pressed', 'true');
-    }
-    announce('Yalnızca ses modu açıldı. Ekran karartıldı, pil ve veri tasarrufu aktif. Çıkmak için Alt+O tuşuna basın.');
-    showQuickToast('📻 Yalnızca Ses Modu Açık');
-  } else {
-    if (overlay) overlay.style.display = 'none';
-    releaseScreenWakeLock();
-    if (audioBtn) {
-      audioBtn.classList.remove('active');
-      audioBtn.setAttribute('aria-pressed', 'false');
-    }
-    announce('Yalnızca ses modu kapatıldı. Görüntü normale döndü.');
-    showQuickToast('🎬 Normal Görüntü Modu');
-  }
-}
 
-// ============================================================================
-// 3. Accessible Live Transcript Reader (NLnet WCAG 2.2 AAA Milestone)
-// ============================================================================
-var liveTranscriptCues = [];
-var isTranscriptPanelOpen = false;
+    // ============================================================================
+    // 3. Accessible Live Transcript Reader (NLnet WCAG 2.2 AAA Milestone)
+    // ============================================================================
+    var liveTranscriptCues = [];
+    var isTranscriptPanelOpen = false;
 
-function extractVideoCaptions() {
-  var video = getVideoElement();
-  if (!video || !video.textTracks || !video.textTracks.length) return [];
+    function extractVideoCaptions() {
+      var video = getVideoElement();
+      if (!video || !video.textTracks || !video.textTracks.length) return [];
 
-  var cuesList = [];
-  for (var i = 0; i < video.textTracks.length; i++) {
-    var track = video.textTracks[i];
-    if (track.cues && track.cues.length) {
-      for (var j = 0; j < track.cues.length; j++) {
-        var cue = track.cues[j];
-        cuesList.push({
-          startTime: cue.startTime,
-          endTime: cue.endTime,
-          text: (cue.text || '').replace(/<[^>]*>/g, '').trim()
-        });
+      var cuesList = [];
+      for (var i = 0; i < video.textTracks.length; i++) {
+        var track = video.textTracks[i];
+        if (track.cues && track.cues.length) {
+          for (var j = 0; j < track.cues.length; j++) {
+            var cue = track.cues[j];
+            cuesList.push({
+              startTime: cue.startTime,
+              endTime: cue.endTime,
+              text: (cue.text || '').replace(/<[^>]*>/g, '').trim()
+            });
+          }
+          break;
+        }
       }
-      break;
+      return cuesList;
     }
-  }
-  return cuesList;
-}
 
-function openTranscriptPanel() {
-  var existing = document.getElementById('yaktube-transcript-panel');
-  if (existing) {
-    existing.remove();
-    isTranscriptPanelOpen = false;
-    restoreFocusAfterModal();
-    announce('Transkript paneli kapatıldı.');
-    return;
-  }
+    function openTranscriptPanel() {
+      var existing = document.getElementById('yaktube-transcript-panel');
+      if (existing) {
+        existing.remove();
+        isTranscriptPanelOpen = false;
+        restoreFocusAfterModal();
+        announce('Transkript paneli kapatıldı.');
+        return;
+      }
 
-  recordFocusBeforeModal();
-  isTranscriptPanelOpen = true;
+      recordFocusBeforeModal();
+      isTranscriptPanelOpen = true;
 
-  var cues = extractVideoCaptions();
-  var video = getVideoElement();
-  var curTime = video ? video.currentTime : 0;
+      var cues = extractVideoCaptions();
+      var video = getVideoElement();
+      var curTime = video ? video.currentTime : 0;
 
-  var panel = document.createElement('div');
-  panel.id = 'yaktube-transcript-panel';
-  panel.className = 'yaktube-transcript-panel';
-  panel.setAttribute('role', 'region');
-  panel.setAttribute('aria-label', 'Video Transkript ve Canlı Metin İnceleyici');
+      var panel = document.createElement('div');
+      panel.id = 'yaktube-transcript-panel';
+      panel.className = 'yaktube-transcript-panel';
+      panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-label', 'Video Transkript ve Canlı Metin İnceleyici');
 
-  var listHtml = '';
-  if (cues && cues.length) {
-    liveTranscriptCues = cues;
-    cues.forEach(function (c, idx) {
-      var isActive = curTime >= c.startTime && curTime <= c.endTime;
-      listHtml +=
-        '<li class="yaktube-transcript-item ' + (isActive ? 'active' : '') + '" data-start="' + c.startTime + '" tabindex="0" role="button" aria-label="' + formatTime(c.startTime) + ': ' + c.text + '">' +
-          '<span class="yaktube-transcript-time">' + formatTime(c.startTime) + '</span>' +
-          '<span class="yaktube-transcript-text">' + c.text + '</span>' +
-        '</li>';
-    });
-  } else {
-    listHtml =
-      '<div class="yaktube-transcript-empty" style="padding:24px; text-align:center; color:#aaa;">' +
-        '<p style="font-size:15px; margin-bottom:8px;">📄 Bu video için otomatik altyazı veya transkript henüz hazır değil.</p>' +
-        '<p style="font-size:13px; color:#777;">Video oynatıcısındaki Altyazı (CC) butonunu açarak dili seçebilirsiniz.</p>' +
-      '</div>';
-  }
+      var listHtml = '';
+      if (cues && cues.length) {
+        liveTranscriptCues = cues;
+        cues.forEach(function (c, idx) {
+          var isActive = curTime >= c.startTime && curTime <= c.endTime;
+          listHtml +=
+            '<li class="yaktube-transcript-item ' +
+            (isActive ? 'active' : '') +
+            '" data-start="' +
+            c.startTime +
+            '" tabindex="0" role="button" aria-label="' +
+            formatTime(c.startTime) +
+            ': ' +
+            c.text +
+            '">' +
+            '<span class="yaktube-transcript-time">' +
+            formatTime(c.startTime) +
+            '</span>' +
+            '<span class="yaktube-transcript-text">' +
+            c.text +
+            '</span>' +
+            '</li>';
+        });
+      } else {
+        listHtml =
+          '<div class="yaktube-transcript-empty" style="padding:24px; text-align:center; color:#aaa;">' +
+          '<p style="font-size:15px; margin-bottom:8px;">📄 Bu video için otomatik altyazı veya transkript henüz hazır değil.</p>' +
+          '<p style="font-size:13px; color:#777;">Video oynatıcısındaki Altyazı (CC) butonunu açarak dili seçebilirsiniz.</p>' +
+          '</div>';
+      }
 
-  panel.innerHTML =
-    '<div class="yaktube-transcript-header">' +
-      '<div style="display:flex; align-items:center; gap:8px;">' +
+      panel.innerHTML =
+        '<div class="yaktube-transcript-header">' +
+        '<div style="display:flex; align-items:center; gap:8px;">' +
         '<span style="font-size:18px;">📜</span>' +
         '<h3 style="margin:0; font-size:16px; font-weight:700; color:#ff8f37;">Video Transkripti</h3>' +
-      '</div>' +
-      '<div style="display:flex; align-items:center; gap:8px;">' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:8px;">' +
         '<input type="text" id="yaktube-transcript-search" class="yaktube-transcript-search" placeholder="Transkriptte ara..." aria-label="Transkript içinde kelime ara" />' +
         '<button id="yaktube-transcript-close" class="yaktube-voice-modal-close-btn" aria-label="Transkript panelini kapat">✕</button>' +
-      '</div>' +
-    '</div>' +
-    '<ul id="yaktube-transcript-list" class="yaktube-transcript-list" role="list">' + listHtml + '</ul>';
+        '</div>' +
+        '</div>' +
+        '<ul id="yaktube-transcript-list" class="yaktube-transcript-list" role="list">' +
+        listHtml +
+        '</ul>';
 
-  var closeBtn = panel.querySelector('#yaktube-transcript-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function () {
-      panel.remove();
-      isTranscriptPanelOpen = false;
-      restoreFocusAfterModal();
-    });
-  }
-
-  // Click on cue to jump video
-  panel.querySelectorAll('.yaktube-transcript-item').forEach(function (item) {
-    function jumpToCue() {
-      var start = parseFloat(item.getAttribute('data-start'));
-      var v = getVideoElement();
-      if (v && !isNaN(start)) {
-        v.currentTime = start;
-        if (v.paused) v.play();
-        announce(formatTime(start) + ' konumuna gidildi: ' + item.querySelector('.yaktube-transcript-text').textContent);
+      var closeBtn = panel.querySelector('#yaktube-transcript-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          panel.remove();
+          isTranscriptPanelOpen = false;
+          restoreFocusAfterModal();
+        });
       }
-    }
-    item.addEventListener('click', jumpToCue);
-    item.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        jumpToCue();
-      }
-    });
-  });
 
-  // Live search in transcript
-  var searchInp = panel.querySelector('#yaktube-transcript-search');
-  if (searchInp) {
-    searchInp.addEventListener('input', function (e) {
-      var query = (e.target.value || '').toLowerCase().trim();
+      // Click on cue to jump video
       panel.querySelectorAll('.yaktube-transcript-item').forEach(function (item) {
-        var txt = (item.querySelector('.yaktube-transcript-text').textContent || '').toLowerCase();
-        item.style.display = txt.includes(query) ? 'flex' : 'none';
+        function jumpToCue() {
+          var start = parseFloat(item.getAttribute('data-start'));
+          var v = getVideoElement();
+          if (v && !isNaN(start)) {
+            v.currentTime = start;
+            if (v.paused) v.play();
+            announce(
+              formatTime(start) + ' konumuna gidildi: ' + item.querySelector('.yaktube-transcript-text').textContent
+            );
+          }
+        }
+        item.addEventListener('click', jumpToCue);
+        item.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            jumpToCue();
+          }
+        });
       });
-    });
-  }
 
-  var targetWrap = document.querySelector(
-    '#video-wrapper, #videojs-wrapper, .player-container, my-video-watch .player'
-  );
-  if (targetWrap && targetWrap.parentNode) {
-    targetWrap.parentNode.insertBefore(panel, targetWrap.nextSibling);
-  } else {
-    document.body.appendChild(panel);
-  }
+      // Live search in transcript
+      var searchInp = panel.querySelector('#yaktube-transcript-search');
+      if (searchInp) {
+        searchInp.addEventListener('input', function (e) {
+          var query = (e.target.value || '').toLowerCase().trim();
+          panel.querySelectorAll('.yaktube-transcript-item').forEach(function (item) {
+            var txt = (item.querySelector('.yaktube-transcript-text').textContent || '').toLowerCase();
+            item.style.display = txt.includes(query) ? 'flex' : 'none';
+          });
+        });
+      }
 
-  trapFocusInModal(panel);
-  announce('Transkript paneli açıldı. ' + (cues.length ? cues.length + ' satır metin bulundu.' : 'Altyazı bulunamadı.'));
-}
+      var targetWrap = document.querySelector(
+        '#video-wrapper, #videojs-wrapper, .player-container, my-video-watch .player'
+      );
+      if (targetWrap && targetWrap.parentNode) {
+        targetWrap.parentNode.insertBefore(panel, targetWrap.nextSibling);
+      } else {
+        document.body.appendChild(panel);
+      }
 
-// Sync transcript highlight with current video time
-setInterval(function () {
-  if (!isTranscriptPanelOpen) return;
-  var video = getVideoElement();
-  if (!video) return;
-  var curTime = video.currentTime;
-  var panel = document.getElementById('yaktube-transcript-panel');
-  if (!panel) return;
-
-  var items = panel.querySelectorAll('.yaktube-transcript-item');
-  items.forEach(function (item) {
-    var start = parseFloat(item.getAttribute('data-start'));
-    var isActive = Math.abs(curTime - start) < 3;
-    if (isActive && !item.classList.contains('active')) {
-      items.forEach(function (i) { i.classList.remove('active'); });
-      item.classList.add('active');
+      trapFocusInModal(panel);
+      announce(
+        'Transkript paneli açıldı. ' + (cues.length ? cues.length + ' satır metin bulundu.' : 'Altyazı bulunamadı.')
+      );
     }
-  });
-}, 1500);
 
-// ============================================================================
-// 4. Fediverse Clean Share & Timestamp Generator (Privacy First)
-// ============================================================================
-function openCleanShareModal() {
-  var existing = document.getElementById('yaktube-clean-share-modal');
-  if (existing) existing.remove();
+    // Sync transcript highlight with current video time
+    setInterval(function () {
+      if (!isTranscriptPanelOpen) return;
+      var video = getVideoElement();
+      if (!video) return;
+      var curTime = video.currentTime;
+      var panel = document.getElementById('yaktube-transcript-panel');
+      if (!panel) return;
 
-  recordFocusBeforeModal();
+      var items = panel.querySelectorAll('.yaktube-transcript-item');
+      items.forEach(function (item) {
+        var start = parseFloat(item.getAttribute('data-start'));
+        var isActive = Math.abs(curTime - start) < 3;
+        if (isActive && !item.classList.contains('active')) {
+          items.forEach(function (i) {
+            i.classList.remove('active');
+          });
+          item.classList.add('active');
+        }
+      });
+    }, 1500);
 
-  var video = getVideoElement();
-  var curSec = video ? Math.floor(video.currentTime) : 0;
-  var cleanUrl = window.location.origin + window.location.pathname;
-  var timestampUrl = cleanUrl + '?start=' + curSec + 's';
+    // ============================================================================
+    // 4. Fediverse Clean Share & Timestamp Generator (Privacy First)
+    // ============================================================================
+    function openCleanShareModal() {
+      var existing = document.getElementById('yaktube-clean-share-modal');
+      if (existing) existing.remove();
 
-  var titleEl = document.querySelector('h1.video-title, my-video-watch h1, .video-name, .title');
-  var videoTitle = titleEl ? titleEl.textContent.trim() : document.title;
+      recordFocusBeforeModal();
 
-  var modal = document.createElement('div');
-  modal.id = 'yaktube-clean-share-modal';
-  modal.className = 'yaktube-feature-modal-backdrop';
-  modal.setAttribute('role', 'dialog');
-  modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-labelledby', 'yaktube-share-title');
+      var video = getVideoElement();
+      var curSec = video ? Math.floor(video.currentTime) : 0;
+      var cleanUrl = window.location.origin + window.location.pathname;
+      var timestampUrl = cleanUrl + '?start=' + curSec + 's';
 
-  modal.innerHTML =
-    '<div class="yaktube-modal-card" style="max-width:480px; background:#181824; border:1px solid rgba(255,143,55,0.4); border-radius:18px; padding:24px; color:#fff; box-shadow:0 16px 40px rgba(0,0,0,0.8);">' +
-      '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">' +
+      var titleEl = document.querySelector('h1.video-title, my-video-watch h1, .video-name, .title');
+      var videoTitle = titleEl ? titleEl.textContent.trim() : document.title;
+
+      var modal = document.createElement('div');
+      modal.id = 'yaktube-clean-share-modal';
+      modal.className = 'yaktube-feature-modal-backdrop';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'yaktube-share-title');
+
+      modal.innerHTML =
+        '<div class="yaktube-modal-card" style="max-width:480px; background:#181824; border:1px solid rgba(255,143,55,0.4); border-radius:18px; padding:24px; color:#fff; box-shadow:0 16px 40px rgba(0,0,0,0.8);">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">' +
         '<h3 id="yaktube-share-title" style="margin:0; font-size:18px; color:#ff8f37;">🔗 Temiz ve Federe Paylaşım</h3>' +
         '<button id="yaktube-share-close" class="yaktube-voice-modal-close-btn" aria-label="Kapat">✕</button>' +
-      '</div>' +
-      '<p style="font-size:13px; color:#aaa; margin-bottom:16px;">Tüm reklam ve izleyici parametrelerinden arındırılmış temiz YakTube bağlantısı:</p>' +
-      '<div style="display:flex; flex-direction:column; gap:12px;">' +
+        '</div>' +
+        '<p style="font-size:13px; color:#aaa; margin-bottom:16px;">Tüm reklam ve izleyici parametrelerinden arındırılmış temiz YakTube bağlantısı:</p>' +
+        '<div style="display:flex; flex-direction:column; gap:12px;">' +
         '<div style="display:flex; align-items:center; gap:8px;">' +
-          '<input type="checkbox" id="yaktube-share-timestamp-chk" style="width:18px; height:18px; accent-color:#ff8f37; cursor:pointer;" />' +
-          '<label for="yaktube-share-timestamp-chk" style="font-size:14px; cursor:pointer;">Şu anki zamandan başlat (<b>' + formatTime(curSec) + '</b>)</label>' +
+        '<input type="checkbox" id="yaktube-share-timestamp-chk" style="width:18px; height:18px; accent-color:#ff8f37; cursor:pointer;" />' +
+        '<label for="yaktube-share-timestamp-chk" style="font-size:14px; cursor:pointer;">Şu anki zamandan başlat (<b>' +
+        formatTime(curSec) +
+        '</b>)</label>' +
         '</div>' +
         '<div style="display:flex; gap:8px;">' +
-          '<input type="text" id="yaktube-share-url-inp" value="' + cleanUrl + '" readonly style="flex:1; background:#22222e; border:1px solid #444; border-radius:8px; padding:10px 12px; color:#fff; font-size:13px;" aria-label="Paylaşım Bağlantısı" />' +
-          '<button id="yaktube-copy-share-btn" class="yaktube-play-btn" style="padding:10px 16px; white-space:nowrap;" aria-label="Bağlantıyı Panoya Kopyala">📋 Kopyala</button>' +
+        '<input type="text" id="yaktube-share-url-inp" value="' +
+        cleanUrl +
+        '" readonly style="flex:1; background:#22222e; border:1px solid #444; border-radius:8px; padding:10px 12px; color:#fff; font-size:13px;" aria-label="Paylaşım Bağlantısı" />' +
+        '<button id="yaktube-copy-share-btn" class="yaktube-play-btn" style="padding:10px 16px; white-space:nowrap;" aria-label="Bağlantıyı Panoya Kopyala">📋 Kopyala</button>' +
         '</div>' +
         '<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">' +
-          '<a id="yaktube-mastodon-share" target="_blank" rel="noopener noreferrer" class="yaktube-player-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">🐘 Mastodon / Fediverse</a>' +
-          '<a id="yaktube-whatsapp-share" target="_blank" rel="noopener noreferrer" class="yaktube-player-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">💬 WhatsApp</a>' +
+        '<a id="yaktube-mastodon-share" target="_blank" rel="noopener noreferrer" class="yaktube-player-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">🐘 Mastodon / Fediverse</a>' +
+        '<a id="yaktube-whatsapp-share" target="_blank" rel="noopener noreferrer" class="yaktube-player-action-btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">💬 WhatsApp</a>' +
         '</div>' +
-      '</div>' +
-    '</div>';
+        '</div>' +
+        '</div>';
 
-  var closeBtn = modal.querySelector('#yaktube-share-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function () {
-      modal.remove();
-      restoreFocusAfterModal();
-    });
-  }
+      var closeBtn = modal.querySelector('#yaktube-share-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+          modal.remove();
+          restoreFocusAfterModal();
+        });
+      }
 
-  var chk = modal.querySelector('#yaktube-share-timestamp-chk');
-  var inp = modal.querySelector('#yaktube-share-url-inp');
-  var mastodonLink = modal.querySelector('#yaktube-mastodon-share');
-  var waLink = modal.querySelector('#yaktube-whatsapp-share');
+      var chk = modal.querySelector('#yaktube-share-timestamp-chk');
+      var inp = modal.querySelector('#yaktube-share-url-inp');
+      var mastodonLink = modal.querySelector('#yaktube-mastodon-share');
+      var waLink = modal.querySelector('#yaktube-whatsapp-share');
 
-  function updateShareLinks() {
-    var finalUrl = chk.checked ? timestampUrl : cleanUrl;
-    inp.value = finalUrl;
-    var shareText = encodeURIComponent(videoTitle + ' - YakTube: ' + finalUrl);
-    if (mastodonLink) mastodonLink.href = 'https://mastodonshare.com/?text=' + shareText;
-    if (waLink) waLink.href = 'https://api.whatsapp.com/send?text=' + shareText;
-  }
-  chk.addEventListener('change', updateShareLinks);
-  updateShareLinks();
+      function updateShareLinks() {
+        var finalUrl = chk.checked ? timestampUrl : cleanUrl;
+        inp.value = finalUrl;
+        var shareText = encodeURIComponent(videoTitle + ' - YakTube: ' + finalUrl);
+        if (mastodonLink) mastodonLink.href = 'https://mastodonshare.com/?text=' + shareText;
+        if (waLink) waLink.href = 'https://api.whatsapp.com/send?text=' + shareText;
+      }
+      chk.addEventListener('change', updateShareLinks);
+      updateShareLinks();
 
-  modal.querySelector('#yaktube-copy-share-btn').addEventListener('click', function () {
-    inp.select();
-    navigator.clipboard.writeText(inp.value).then(function () {
-      announce('Temiz paylaşım bağlantısı panoya kopyalandı.');
-      showQuickToast('📋 Bağlantı Kopyalandı!');
-    }).catch(function () {
-      document.execCommand('copy');
-      announce('Temiz paylaşım bağlantısı kopyalandı.');
-    });
-  });
+      modal.querySelector('#yaktube-copy-share-btn').addEventListener('click', function () {
+        inp.select();
+        navigator.clipboard
+          .writeText(inp.value)
+          .then(function () {
+            announce('Temiz paylaşım bağlantısı panoya kopyalandı.');
+            showQuickToast('📋 Bağlantı Kopyalandı!');
+          })
+          .catch(function () {
+            document.execCommand('copy');
+            announce('Temiz paylaşım bağlantısı kopyalandı.');
+          });
+      });
 
-  document.body.appendChild(modal);
-  trapFocusInModal(modal);
-  announce('Paylaşım penceresi açıldı. Kapatmak için Escape tuşuna basın.');
-}
+      document.body.appendChild(modal);
+      trapFocusInModal(modal);
+      announce('Paylaşım penceresi açıldı. Kapatmak için Escape tuşuna basın.');
+    }
 
-// ============================================================================
-// 5. F6 Landmark Cycle Navigation (WCAG 2.2 AAA Quick Switch)
-// ============================================================================
-var landmarkIndex = 0;
-function cycleLandmarks(reverse) {
-  var landmarks = [
-    { name: 'Başlık ve Ana Arama', selector: 'header, my-header, #yaktube-search-input' },
-    { name: 'Kategori Çipleri', selector: '#yaktube-home-categories, .yaktube-categories-bar' },
-    { name: 'Video Oynatıcı Alanı', selector: '#videojs-wrapper, .video-js, #video-wrapper' },
-    { name: 'Video Araç Çubuğu', selector: '#yaktube-player-action-bar' },
-    { name: 'Video Açıklaması ve Bilgiler', selector: 'my-video-watch-description, .video-info, .video-bottom' },
-    { name: 'Yorumlar ve Tartışmalar', selector: 'my-video-comments, .comments' },
-    { name: 'Önerilen Videolar', selector: 'my-video-watch-related, .related-videos, #yaktube-ondemand-container' }
-  ];
+    // ============================================================================
+    // 5. F6 Landmark Cycle Navigation (WCAG 2.2 AAA Quick Switch)
+    // ============================================================================
+    var landmarkIndex = 0;
+    function cycleLandmarks(reverse) {
+      var landmarks = [
+        { name: 'Başlık ve Ana Arama', selector: 'header, my-header, #yaktube-search-input' },
+        { name: 'Kategori Çipleri', selector: '#yaktube-home-categories, .yaktube-categories-bar' },
+        { name: 'Video Oynatıcı Alanı', selector: '#videojs-wrapper, .video-js, #video-wrapper' },
+        { name: 'Video Araç Çubuğu', selector: '#yaktube-player-action-bar' },
+        { name: 'Video Açıklaması ve Bilgiler', selector: 'my-video-watch-description, .video-info, .video-bottom' },
+        { name: 'Yorumlar ve Tartışmalar', selector: 'my-video-comments, .comments' },
+        { name: 'Önerilen Videolar', selector: 'my-video-watch-related, .related-videos, #yaktube-ondemand-container' }
+      ];
 
-  var validLandmarks = landmarks.map(function (item) {
-    return { name: item.name, el: document.querySelector(item.selector) };
-  }).filter(function (item) {
-    return !!item.el && item.el.offsetParent !== null;
-  });
+      var validLandmarks = landmarks
+        .map(function (item) {
+          return { name: item.name, el: document.querySelector(item.selector) };
+        })
+        .filter(function (item) {
+          return !!item.el && item.el.offsetParent !== null;
+        });
 
-  if (!validLandmarks.length) {
-    announce('Sayfada gezinilebilir alan bulunamadı.');
-    return;
-  }
+      if (!validLandmarks.length) {
+        announce('Sayfada gezinilebilir alan bulunamadı.');
+        return;
+      }
 
-  if (reverse) {
-    landmarkIndex = (landmarkIndex - 1 + validLandmarks.length) % validLandmarks.length;
-  } else {
-    landmarkIndex = (landmarkIndex + 1) % validLandmarks.length;
-  }
+      if (reverse) {
+        landmarkIndex = (landmarkIndex - 1 + validLandmarks.length) % validLandmarks.length;
+      } else {
+        landmarkIndex = (landmarkIndex + 1) % validLandmarks.length;
+      }
 
-  var target = validLandmarks[landmarkIndex];
-  if (target && target.el) {
-    target.el.setAttribute('tabindex', '-1');
-    target.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    target.el.focus();
-    announce('Bölgeye atlandı: ' + target.name);
-    showQuickToast('🎯 ' + target.name);
-  }
-}
-
+      var target = validLandmarks[landmarkIndex];
+      if (target && target.el) {
+        target.el.setAttribute('tabindex', '-1');
+        target.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.el.focus();
+        announce('Bölgeye atlandı: ' + target.name);
+        showQuickToast('🎯 ' + target.name);
+      }
+    }
 
     function toggleShortcutsModal() {
       var modal = document.getElementById('yaktube-shortcuts-dialog');
@@ -1514,6 +1545,7 @@ function cycleLandmarks(reverse) {
           announce('Klavye kısayolları yardım penceresi açıldı. Kapatmak için Escape tuşuna basın.');
           var closeBtn = document.getElementById('yaktube-shortcuts-close');
           if (closeBtn) closeBtn.focus();
+          trapFocusInModal(modal);
         } else {
           modal.style.display = 'none';
           announce('Yardım penceresi kapatıldı.');
@@ -1544,7 +1576,9 @@ function cycleLandmarks(reverse) {
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + M</span> veya <span class="yaktube-kbd">M</span></td><td>Sesi Kapat / Aç (Mute)</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + T</span> veya <span class="yaktube-kbd">T</span></td><td>Sinema / Tiyatro Modu</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + I</span> veya <span class="yaktube-kbd">I</span></td><td>Hızlı Video Bilgisi & İstatistikler</td></tr>' +
-          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + C</span> veya <span class="yaktube-kbd">C</span></td><td>Altyazıları Aç / Kapat</td></tr>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + C</span></td><td>📜 Canlı Video Transkript Panelini Aç / Kapat</td></tr>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + O</span></td><td>📻 Yalnızca Ses & Ekran Karartma Modu</td></tr>' +
+          '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">F6</span> / <span class="yaktube-kbd">Shift + F6</span></td><td>🎯 Mantıksal Bölge Gezinmesi (Landmarks)</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + U</span></td><td>⏱️ Uyku Zamanlayıcısı (Sleep Timer)</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + Q</span></td><td>📱 Telefonda Devam Et (QR Kod)</td></tr>' +
           '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);"><td style="padding:8px 0;"><span class="yaktube-kbd">Alt + .</span> / <span class="yaktube-kbd">Alt + ,</span></td><td>Oynatma hızını artır / azalt</td></tr>' +
@@ -2878,7 +2912,7 @@ function cycleLandmarks(reverse) {
         shareBtn.addEventListener('click', function () {
           openCleanShareModal();
         });
-      };
+      }
 
       bar.querySelector('#yaktube-bar-help-btn').addEventListener('click', function () {
         toggleShortcutsModal();

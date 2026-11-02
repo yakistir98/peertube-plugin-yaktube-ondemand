@@ -196,9 +196,11 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         return result;
       }
     });
-    if (logger) logger.info('[YakTube OnDemand] Registered filter:notifier.notification.enabled.result (suppressing successful import notifications).');
+    if (logger)
+      logger.info(
+        '[YakTube OnDemand] Registered filter:notifier.notification.enabled.result (suppressing successful import notifications).'
+      );
   }
-
 
   let guestImportLimit = 5;
   let maxDiskUsagePercent = 85;

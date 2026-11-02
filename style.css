@@ -1764,7 +1764,6 @@ my-date-toggle .date-toggle:focus-visible {
   outline: 2px solid #ff8f37 !important;
 }
 
-
 /* === YakTube WCAG 2.1 AAA Video Player Accessibility: Keep Controls Accessible === */
 
 /* 1. Video duraklatıldığında veya klavye/ekran okuyucu odaklandığında denetim çubuğunu görünür tut */
@@ -1789,7 +1788,6 @@ my-date-toggle .date-toggle:focus-visible {
   outline-offset: 2px !important;
   box-shadow: 0 0 10px rgba(255, 143, 55, 0.8) !important;
 }
-
 
 /* === YakTube NLnet WCAG 2.2 AAA & Privacy Suite Styles === */
 
@@ -1832,7 +1830,9 @@ my-date-toggle .date-toggle:focus-visible {
   font-size: 14px !important;
   font-weight: 700 !important;
   cursor: pointer !important;
-  transition: transform 0.15s, opacity 0.15s !important;
+  transition:
+    transform 0.15s,
+    opacity 0.15s !important;
 }
 
 .yaktube-audio-action-btn:hover,
