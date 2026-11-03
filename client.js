@@ -3584,7 +3584,7 @@ try {
       var customUrl = '/api-custom' + cleanPath;
 
       if (!preferredApiPrefix) {
-        preferredApiPrefix = isOfficialYakTubeServer() ? '/api-custom' : '/plugins/yaktube-ondemand/router';
+        preferredApiPrefix = '/plugins/yaktube-ondemand/router';
       }
 
       var primaryUrl = preferredApiPrefix + cleanPath;
@@ -3614,6 +3614,7 @@ try {
     // --- Guest Video Import Quota & PeerTube Login Redirect Engine ---
     var cachedGuestImportLimit = null;
     var cachedCategories = null;
+    var cachedSmartPrefetchMode = 'auto-when-no-local';
 
     function fetchGuestImportLimit() {
       if (cachedGuestImportLimit !== null && cachedCategories !== null) {
@@ -3626,6 +3627,9 @@ try {
           }
           if (d && typeof d.yaknetSsoEnabled === 'boolean') {
             cachedYakNetSsoEnabled = d.yaknetSsoEnabled;
+          }
+          if (d && typeof d.smartPrefetchMode === 'string') {
+            cachedSmartPrefetchMode = d.smartPrefetchMode;
           }
           if (d && Array.isArray(d.categories) && d.categories.length > 0) {
             cachedCategories = d.categories;
@@ -5564,12 +5568,146 @@ try {
       }
     } catch (e) {}
 
-    // 7.5. Reactive Hybrid Related Videos Engine (Watch Page)
+    // 7.5. YouTube-Style Smart Recommendation, History Profiler & Up-Next Engine (Watch Page)
     var currentActiveVideoKey = null;
     var isFetchingRelated = false;
     var relatedShowAll = false;
     var cachedRelatedResults = [];
     var cachedRelatedQuery = '';
+    var smartHasLocalMatch = false;
+    var smartPrefetchCandidate = null;
+    var smartPrefetchState = {
+      videoKey: null,
+      status: 'idle', // 'idle' | 'preparing' | 'ready' | 'failed'
+      pollTimer: null,
+      readyUrl: null,
+      readyTitle: null
+    };
+    var upNextCountdownTimer = null;
+
+    function cleanVideoTopicString(rawTitle) {
+      if (!rawTitle) return '';
+      return String(rawTitle)
+        .replace(/YakTube/gi, '')
+        .replace(/[\(\[].*?[\)\]]/g, '')
+        .replace(
+          /official\s*video|video\s*klip|klip|hd|4k|lyric\s*video|audio|remix|feat\.?|ft\.?|şarkı\s*sözleri/gi,
+          ''
+        )
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function recordWatchedVideo(uuid, rawTitle, rawChannel) {
+      if (!rawTitle || rawTitle.length < 3) return;
+      try {
+        var cleanTopic = cleanVideoTopicString(rawTitle);
+        var words = cleanTopic.split(/\s+/).filter(function (w) {
+          return w.length >= 2;
+        });
+        var compactTopic = words.slice(0, 4).join(' ') || cleanTopic;
+        if (!compactTopic || compactTopic.length < 3) return;
+
+        var rawList = localStorage.getItem('yaktube_watch_history');
+        var list = [];
+        if (rawList) {
+          try {
+            var parsed = JSON.parse(rawList);
+            if (Array.isArray(parsed)) list = parsed;
+          } catch (e) {}
+        }
+
+        list = list.filter(function (entry) {
+          if (!entry) return false;
+          if (uuid && entry.uuid === uuid) return false;
+          if (entry.topic && entry.topic.toLowerCase() === compactTopic.toLowerCase()) return false;
+          return true;
+        });
+
+        list.unshift({
+          uuid: uuid || '',
+          title: rawTitle,
+          topic: compactTopic,
+          channel: rawChannel || '',
+          ts: Date.now()
+        });
+
+        if (list.length > 25) list = list.slice(0, 25);
+        localStorage.setItem('yaktube_watch_history', JSON.stringify(list));
+      } catch (e) {}
+    }
+
+    function getUserInterestHistory(excludeTopic) {
+      var interests = [];
+      var seen = {};
+      var normExclude = (excludeTopic || '').toLowerCase().trim();
+      if (normExclude) seen[normExclude] = true;
+
+      var defaultPlaceholders = {
+        tarkan: true,
+        'barış manço': true,
+        'yapay zeka': true,
+        'canlı haber': true
+      };
+
+      // 1. Recent watched video topics
+      try {
+        var rawWatch = localStorage.getItem('yaktube_watch_history');
+        if (rawWatch) {
+          var watchList = JSON.parse(rawWatch);
+          if (Array.isArray(watchList)) {
+            watchList.forEach(function (w) {
+              var t = w && (w.topic || w.title) ? String(w.topic || w.title).trim() : '';
+              var low = t.toLowerCase();
+              if (t.length >= 3 && !seen[low]) {
+                seen[low] = true;
+                interests.push(t);
+              }
+            });
+          }
+        }
+      } catch (e) {}
+
+      // 2. Recent user search queries
+      try {
+        var searches = getRecentSearches();
+        if (Array.isArray(searches)) {
+          var hasRealSearches = searches.some(function (s) {
+            return s && !defaultPlaceholders[String(s).toLowerCase().trim()];
+          });
+          searches.forEach(function (s) {
+            var term = String(s || '').trim();
+            var low = term.toLowerCase();
+            if (hasRealSearches && defaultPlaceholders[low]) return;
+            if (term.length >= 3 && !seen[low]) {
+              seen[low] = true;
+              interests.push(term);
+            }
+          });
+        }
+      } catch (e) {}
+
+      return interests.slice(0, 8);
+    }
+
+    function suppressUnrelatedNativeRecommendations() {
+      try {
+        // Prevent PeerTube's native player from auto-redirecting to unrelated foreign/federated videos on video end
+        localStorage.setItem('auto-play-video', 'false');
+        sessionStorage.setItem('auto-play-video', 'false');
+      } catch (e) {}
+
+      var recContainers = document.querySelectorAll('my-recommended-videos, .other-videos, .video-watch-next');
+      recContainers.forEach(function (rec) {
+        Array.from(rec.children).forEach(function (child) {
+          if (child.id === 'yaktube-hybrid-related-container' || child.id === 'yaktube-upnext-overlay') {
+            return;
+          }
+          child.style.setProperty('display', 'none', 'important');
+          child.setAttribute('aria-hidden', 'true');
+        });
+      });
+    }
 
     function renderRelatedCards(container, results, query) {
       var count = results ? results.length : 0;
@@ -5579,67 +5717,78 @@ try {
       }
 
       container.style.display = 'block';
+      suppressUnrelatedNativeRecommendations();
+
       var limit = relatedShowAll ? count : Math.min(count, 12);
       var displayed = results.slice(0, limit);
 
       var cardsHtml = '';
       displayed.forEach(function (item) {
         var isLocal = !!item.isDownloaded;
-        var statusBadge = isLocal
-          ? '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 4px; display: inline-block; font-size:10px; padding:2px 8px;">✅ ' +
-            getInstanceName() +
-            "'da İzle</span>"
-          : '<span class="yaktube-badge" style="background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); margin-bottom: 4px; display: inline-block; font-size:10px; padding:2px 8px;">⚡ Canlı Keşif</span>';
+        var badgeLabel = item.reasonBadge || (isLocal ? '✅ ' + getInstanceName() + "'da İzle" : '🔥 Benzer İçerik');
+        var isHistoryMatch = badgeLabel.indexOf('Geçmişinize Göre') !== -1;
 
-        var actionButton = isLocal
-          ? '<a href="' +
-            item.localVideo.url +
-            '" class="yaktube-play-btn yaktube-related-play-link" style="font-size:11px; padding:6px 10px;" aria-label="' +
-            item.title.replace(/"/g, '&quot;') +
-            ' videosunu ' +
-            escapeHtml(getInstanceName()) +
-            '\'dan hemen izle">▶️ Hemen İzle</a>'
-          : '<button class="yaktube-import-btn yaktube-related-import" data-url="' +
-            item.url +
-            '" data-title="' +
-            item.title.replace(/"/g, '&quot;') +
-            '" style="font-size:11px; padding:6px 10px;" aria-label="' +
-            item.title.replace(/"/g, '&quot;') +
-            ' videosunu ' +
-            getInstanceName() +
-            '\'a indir ve izle">📥 İndir ve İzle</button>';
+        var badgeStyle = isLocal
+          ? 'background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff;'
+          : isHistoryMatch
+            ? 'background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff;'
+            : 'background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); color: #fff;';
+
+        var statusBadge =
+          '<span class="yaktube-badge" style="' +
+          badgeStyle +
+          ' margin-bottom: 4px; display: inline-block; font-size:10px; padding:2px 8px; font-weight:700;">' +
+          escapeHtml(badgeLabel) +
+          '</span>';
+
+        var safeTitleAttr = (item.title || '').replace(/"/g, '&quot;');
+        var actionButton =
+          isLocal && item.localVideo && item.localVideo.url
+            ? '<a href="' +
+              escapeHtml(item.localVideo.url) +
+              '" class="yaktube-play-btn yaktube-related-play-link" style="font-size:11px; padding:6px 10px;" aria-label="' +
+              safeTitleAttr +
+              ' videosunu ' +
+              escapeHtml(getInstanceName()) +
+              '\'dan hemen izle">▶️ Hemen İzle</a>'
+            : '<button class="yaktube-import-btn yaktube-related-import" data-yt-id="' +
+              escapeHtml(item.id || '') +
+              '" data-url="' +
+              escapeHtml(item.url || '') +
+              '" data-title="' +
+              safeTitleAttr +
+              '" style="font-size:11px; padding:6px 10px;" aria-label="' +
+              safeTitleAttr +
+              ' videosunu ' +
+              escapeHtml(getInstanceName()) +
+              '\'a indir ve izle">📥 İndir ve İzle</button>';
 
         var cardLabel =
-          item.title +
-          (isLocal ? ' (' + getInstanceName() + ' kütüphanenizde mevcut)' : ' (Canlı YouTube keşfi)') +
-          ', ' +
-          item.channel +
-          ' kanalı, Süre: ' +
-          item.durationFormatted;
+          item.title + ' (' + badgeLabel + '), ' + item.channel + ' kanalı, Süre: ' + (item.durationFormatted || '');
         cardsHtml +=
           '<div class="yaktube-card" role="article" tabindex="0" style="margin-bottom:10px;" aria-label="' +
           cardLabel.replace(/"/g, '&quot;') +
           '">' +
           '<div class="yaktube-thumb-wrap">' +
           '<img class="yaktube-thumb-img" src="' +
-          item.thumbnail +
+          escapeHtml(item.thumbnail || '/client/assets/images/default-thumbnail.jpg') +
           '" alt="' +
-          item.title.replace(/"/g, '&quot;') +
-          '" loading="lazy" />' +
+          safeTitleAttr +
+          '" loading="lazy" onerror="this.src=\'/client/assets/images/default-thumbnail.jpg\'" />' +
           '<span class="yaktube-duration-badge" aria-label="Süre">' +
-          item.durationFormatted +
+          escapeHtml(item.durationFormatted || '') +
           '</span>' +
           '</div>' +
           '<div class="yaktube-info">' +
           '<div>' +
           statusBadge +
           '<h4 class="yaktube-video-name" title="' +
-          item.title +
+          safeTitleAttr +
           '" style="margin:0; font-size:12px; font-weight:600; line-height:1.35;">' +
-          item.title +
+          escapeHtml(item.title || '') +
           '</h4>' +
           '<div class="yaktube-channel-name" style="font-size:10px;">' +
-          item.channel +
+          escapeHtml(item.channel || '') +
           '</div>' +
           '</div>' +
           actionButton +
@@ -5665,18 +5814,29 @@ try {
       }
 
       var headerCountText = count > 12 && !relatedShowAll ? displayed.length + ' / ' + count : count;
+      var prefetchStatusHtml = '';
+      if (smartPrefetchState.videoKey === currentActiveVideoKey) {
+        if (smartPrefetchState.status === 'preparing') {
+          prefetchStatusHtml =
+            '<span id="yaktube-smart-prefetch-status" style="font-size:11px; color:#38bdf8; background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); padding:3px 9px; border-radius:20px; font-weight:600;">⚡ Sıradaki öneri arka planda hazırlanıyor...</span>';
+        } else if (smartPrefetchState.status === 'ready') {
+          prefetchStatusHtml =
+            '<span id="yaktube-smart-prefetch-status" style="font-size:11px; color:#10b981; background:rgba(16,185,129,0.14); border:1px solid rgba(16,185,129,0.35); padding:3px 9px; border-radius:20px; font-weight:700;">✅ Sıradaki öneri kesintisiz izlemeye hazır!</span>';
+        }
+      }
 
       container.innerHTML =
-        '<div class="yaktube-header">' +
-        '<div class="yaktube-header-left">' +
+        '<div class="yaktube-header" style="flex-wrap:wrap; gap:8px;">' +
+        '<div class="yaktube-header-left" style="flex-wrap:wrap; gap:8px;">' +
         '<span class="yaktube-badge">🔥 ' +
-        getInstanceName() +
+        escapeHtml(getInstanceName()) +
         ' Akıllı Önerilenler</span>' +
-        '<h3 class="yaktube-title-h3" style="margin:0; font-size:1.05rem;">"' +
-        query +
-        '" ile İlgili Öneriler (' +
+        '<h3 class="yaktube-title-h3" style="margin:0; font-size:1.05rem;">Size ve "' +
+        escapeHtml(query) +
+        '" İçeriğine Özel Öneriler (' +
         headerCountText +
         ')</h3>' +
+        prefetchStatusHtml +
         '</div>' +
         '<button id="yaktube-related-refresh-btn" class="yaktube-shortcuts-btn" aria-label="Önerileri Yenile">' +
         '🔄 Yenile' +
@@ -5721,12 +5881,268 @@ try {
       });
     }
 
+    function triggerSilentBackgroundPrefetch(candidate, videoKey) {
+      if (!candidate || !candidate.url || !videoKey) return;
+      if (smartPrefetchState.videoKey === videoKey && smartPrefetchState.status !== 'idle') return;
+
+      // Avoid duplicate background imports in the same browser session
+      try {
+        var sessionKey = 'yaktube_prefetched_' + (candidate.id || candidate.url);
+        if (sessionStorage.getItem(sessionKey)) return;
+        sessionStorage.setItem(sessionKey, 'true');
+      } catch (e) {}
+
+      // Respect guest quota: do not trigger silent prefetch if guest has reached limit
+      var loggedIn = isUserLoggedIn();
+      var currentGuestCount = getGuestImportCount();
+      if (
+        !loggedIn &&
+        cachedGuestImportLimit !== null &&
+        cachedGuestImportLimit > 0 &&
+        currentGuestCount >= cachedGuestImportLimit
+      ) {
+        return;
+      }
+
+      if (smartPrefetchState.pollTimer) {
+        clearInterval(smartPrefetchState.pollTimer);
+        smartPrefetchState.pollTimer = null;
+      }
+
+      smartPrefetchState.videoKey = videoKey;
+      smartPrefetchState.status = 'preparing';
+      smartPrefetchState.readyUrl = null;
+      smartPrefetchState.readyTitle = candidate.title;
+
+      var relContainer = document.getElementById('yaktube-hybrid-related-container');
+      if (relContainer && cachedRelatedResults.length > 0) {
+        renderRelatedCards(relContainer, cachedRelatedResults, cachedRelatedQuery);
+      }
+
+      var headers = { 'Content-Type': 'application/json' };
+      try {
+        var token = localStorage.getItem('access_token');
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+      } catch (e) {}
+
+      fetchPluginJson('/ondemand-import', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          targetUrl: candidate.url,
+          title: candidate.title,
+          isAuthenticated: loggedIn,
+          guestImportCount: currentGuestCount
+        })
+      })
+        .then(function (data) {
+          if (!data || !data.ok || !data.video || !data.video.id) {
+            smartPrefetchState.status = 'failed';
+            return;
+          }
+          var videoId = data.video.id;
+          var videoUuid = data.video.uuid;
+          var attempts = 0;
+
+          smartPrefetchState.pollTimer = setInterval(function () {
+            attempts++;
+            if (currentActiveVideoKey !== videoKey || attempts > 45) {
+              clearInterval(smartPrefetchState.pollTimer);
+              smartPrefetchState.pollTimer = null;
+              return;
+            }
+            fetchPluginJson('/status/' + videoId)
+              .then(function (sData) {
+                if (sData && (sData.isPublished || (sData.hasFiles && attempts >= 8))) {
+                  clearInterval(smartPrefetchState.pollTimer);
+                  smartPrefetchState.pollTimer = null;
+                  var watchUrl = '/videos/watch/' + (sData.uuid || videoUuid);
+                  smartPrefetchState.status = 'ready';
+                  smartPrefetchState.readyUrl = watchUrl;
+                  smartHasLocalMatch = true;
+
+                  // Upgrade candidate inside cachedRelatedResults to ready-to-play local video
+                  cachedRelatedResults.forEach(function (it) {
+                    if ((candidate.id && it.id === candidate.id) || (candidate.url && it.url === candidate.url)) {
+                      it.isDownloaded = true;
+                      it.reasonBadge = '⚡ Sıradaki Öneri Hazır';
+                      it.localVideo = {
+                        id: videoId,
+                        uuid: sData.uuid || videoUuid,
+                        name: sData.name || candidate.title,
+                        url: watchUrl
+                      };
+                    }
+                  });
+
+                  var c = document.getElementById('yaktube-hybrid-related-container');
+                  if (c && cachedRelatedResults.length > 0) {
+                    renderRelatedCards(c, cachedRelatedResults, cachedRelatedQuery);
+                  }
+                } else if (sData && sData.isFailed) {
+                  clearInterval(smartPrefetchState.pollTimer);
+                  smartPrefetchState.pollTimer = null;
+                  smartPrefetchState.status = 'failed';
+                }
+              })
+              .catch(function () {});
+          }, 2500);
+        })
+        .catch(function () {
+          smartPrefetchState.status = 'failed';
+        });
+    }
+
+    function checkSmartPrefetchOnTimeUpdate(video) {
+      if (!video || !currentActiveVideoKey || !smartPrefetchCandidate) return;
+      if (smartPrefetchState.videoKey === currentActiveVideoKey && smartPrefetchState.status !== 'idle') return;
+      if (cachedSmartPrefetchMode === 'disabled') return;
+      if (cachedSmartPrefetchMode === 'auto-when-no-local' && smartHasLocalMatch) return;
+
+      var cur = video.currentTime || 0;
+      var dur = video.duration || 0;
+      var threshold = dur > 0 && dur < 65 ? Math.max(8, dur * 0.35) : 25;
+      if (cur >= threshold) {
+        triggerSilentBackgroundPrefetch(smartPrefetchCandidate, currentActiveVideoKey);
+      }
+    }
+
+    function clearUpNextOverlay() {
+      if (upNextCountdownTimer) {
+        clearInterval(upNextCountdownTimer);
+        upNextCountdownTimer = null;
+      }
+      var existing = document.getElementById('yaktube-upnext-overlay');
+      if (existing) existing.remove();
+    }
+
+    function showPostVideoUpNextOverlay() {
+      clearUpNextOverlay();
+      if (!cachedRelatedResults || cachedRelatedResults.length === 0) return;
+
+      // Pick #1 ready local match first; otherwise #1 topic match
+      var nextItem =
+        cachedRelatedResults.find(function (it) {
+          return it && it.isDownloaded && it.localVideo && it.localVideo.url;
+        }) || cachedRelatedResults[0];
+
+      if (!nextItem) return;
+
+      var isReadyLocal = !!(nextItem.isDownloaded && nextItem.localVideo && nextItem.localVideo.url);
+      var banner = document.createElement('div');
+      banner.id = 'yaktube-upnext-overlay';
+      banner.setAttribute('role', 'region');
+      banner.setAttribute('aria-label', 'Sıradaki İlgili Video Önerisi');
+      banner.style.cssText =
+        'margin: 14px 0 18px 0; padding: 16px 20px; border-radius: 14px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 2px solid #ff8f37; box-shadow: 0 10px 30px rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;';
+
+      var safeTitle = escapeHtml(nextItem.title || 'İlgili Video');
+      var safeChannel = escapeHtml(nextItem.channel || getInstanceName());
+      var safeBadge = escapeHtml(nextItem.reasonBadge || '🔥 Benzer İçerik');
+      var safeThumb = escapeHtml(nextItem.thumbnail || '/client/assets/images/default-thumbnail.jpg');
+
+      var secondsLeft = 6;
+
+      banner.innerHTML =
+        '<div style="display:flex; align-items:center; gap:14px; min-width:240px; flex:1;">' +
+        '<img src="' +
+        safeThumb +
+        '" alt="" style="width:96px; height:56px; object-fit:cover; border-radius:8px; flex-shrink:0; border:1px solid rgba(255,255,255,0.15);" onerror="this.src=\'/client/assets/images/default-thumbnail.jpg\'" />' +
+        '<div style="min-width:0;">' +
+        '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">' +
+        '<span style="background:#ff8f37; color:#000; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">⏭️ SIRADAKİ İLGİLİ VİDEO</span>' +
+        '<span style="font-size:11px; color:#5eead4; font-weight:600;">' +
+        safeBadge +
+        '</span>' +
+        '</div>' +
+        '<div style="font-size:14px; font-weight:700; color:#f8fafc; line-height:1.35;">' +
+        safeTitle +
+        '</div>' +
+        '<div style="font-size:12px; color:#94a3b8; margin-top:2px;">' +
+        safeChannel +
+        (isReadyLocal
+          ? ' • <span id="yaktube-upnext-countdown-txt" style="color:#ff8f37; font-weight:700;">' +
+            secondsLeft +
+            ' saniye içinde başlıyor...</span>'
+          : '') +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
+        (isReadyLocal
+          ? '<a id="yaktube-upnext-play-btn" href="' +
+            escapeHtml(nextItem.localVideo.url) +
+            '" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; text-decoration:none; padding:10px 18px; border-radius:10px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px;">▶️ Hemen İzle</a>'
+          : '<button type="button" id="yaktube-upnext-import-btn" style="background:linear-gradient(135deg, #ff8f37 0%, #ea580c 100%); color:#000; border:none; padding:10px 18px; border-radius:10px; font-weight:800; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">📥 İndir ve Hemen İzle</button>') +
+        '<button type="button" id="yaktube-upnext-cancel-btn" style="background:#334155; color:#e2e8f0; border:1px solid rgba(255,255,255,0.15); padding:10px 14px; border-radius:10px; font-weight:600; font-size:12px; cursor:pointer;">' +
+        (isReadyLocal ? '✕ Otomatik Geçişi Durdur' : '✕ Kapat') +
+        '</button>' +
+        '</div>';
+
+      var actionBar = document.getElementById('yaktube-player-action-bar');
+      var relContainer = document.getElementById('yaktube-hybrid-related-container');
+      if (actionBar && actionBar.parentNode) {
+        actionBar.insertAdjacentElement('afterend', banner);
+      } else if (relContainer && relContainer.parentNode) {
+        relContainer.parentNode.insertBefore(banner, relContainer);
+      } else {
+        document.body.appendChild(banner);
+      }
+
+      var cancelBtn = document.getElementById('yaktube-upnext-cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+          if (upNextCountdownTimer) {
+            clearInterval(upNextCountdownTimer);
+            upNextCountdownTimer = null;
+            var cdTxt = document.getElementById('yaktube-upnext-countdown-txt');
+            if (cdTxt) cdTxt.textContent = 'Otomatik geçiş durduruldu';
+            cancelBtn.textContent = '✕ Kapat';
+            announce('Otomatik video geçişi durduruldu.');
+          } else {
+            clearUpNextOverlay();
+          }
+        });
+      }
+
+      var importBtn = document.getElementById('yaktube-upnext-import-btn');
+      if (importBtn) {
+        importBtn.addEventListener('click', function () {
+          clearUpNextOverlay();
+          handleImport(nextItem.url, importBtn, nextItem.title);
+        });
+      }
+
+      if (isReadyLocal) {
+        announce(
+          'Video sona erdi. Sıradaki ilgili video 6 saniye içinde başlayacak: ' +
+            nextItem.title +
+            '. Durdurmak için Otomatik Geçişi Durdur düğmesine basabilirsiniz.'
+        );
+        upNextCountdownTimer = setInterval(function () {
+          secondsLeft--;
+          var cdTxt = document.getElementById('yaktube-upnext-countdown-txt');
+          if (cdTxt && secondsLeft > 0) {
+            cdTxt.textContent = secondsLeft + ' saniye içinde başlıyor...';
+          }
+          if (secondsLeft <= 0) {
+            clearInterval(upNextCountdownTimer);
+            upNextCountdownTimer = null;
+            window.location.href = nextItem.localVideo.url;
+          }
+        }, 1000);
+      } else {
+        announce('Video sona erdi. Sıradaki ilgili öneri: ' + nextItem.title);
+      }
+    }
+
     function checkAndInjectRelatedVideos(forceReload) {
       var isWatchPage =
         window.location.pathname.includes('/videos/watch/') || window.location.pathname.startsWith('/w/');
       if (!isWatchPage) {
         var existing = document.getElementById('yaktube-hybrid-related-container');
         if (existing) existing.remove();
+        clearUpNextOverlay();
         currentActiveVideoKey = null;
         return;
       }
@@ -5744,6 +6160,13 @@ try {
       }
 
       var currentPath = window.location.pathname;
+      var uuidMatch =
+        currentPath.match(/\/videos\/watch\/([a-zA-Z0-9_-]+)/) || currentPath.match(/\/w\/([a-zA-Z0-9_-]+)/);
+      var currentUuid = uuidMatch ? uuidMatch[1] : '';
+
+      var channelElem = document.querySelector('.video-channel-name, .channel-name, .actor-name, a.actor-link');
+      var rawChannel = channelElem ? (channelElem.textContent || '').trim() : '';
+
       var thisVideoKey = currentPath + '::' + rawTitle.toLowerCase();
 
       if (
@@ -5751,22 +6174,23 @@ try {
         thisVideoKey === currentActiveVideoKey &&
         document.getElementById('yaktube-hybrid-related-container')
       ) {
+        suppressUnrelatedNativeRecommendations();
         return;
       }
 
       if (isFetchingRelated) return;
       isFetchingRelated = true;
+      clearUpNextOverlay();
 
-      var cleanTopic = rawTitle
-        .replace(/YakTube/gi, '')
-        .replace(/[\(\[].*?[\)\]]/g, '')
-        .replace(/official video|video klip|klip|hd|4k|lyric video|audio|remix|feat\.?|ft\.?/gi, '')
-        .trim();
-
+      var cleanTopic = cleanVideoTopicString(rawTitle);
       var words = cleanTopic.split(/\s+/).filter(function (w) {
-        return w.length > 2;
+        return w.length >= 2;
       });
-      var searchQuery = words.slice(0, 3).join(' ') || cleanTopic;
+      var searchQuery = words.slice(0, 4).join(' ') || cleanTopic || rawTitle;
+
+      // Record current video in user watch history & gather user interest history
+      var userHistoryList = getUserInterestHistory(searchQuery);
+      recordWatchedVideo(currentUuid, rawTitle, rawChannel);
 
       var container = document.getElementById('yaktube-hybrid-related-container');
       if (!container) {
@@ -5803,61 +6227,87 @@ try {
         return;
       }
 
+      suppressUnrelatedNativeRecommendations();
+
       container.innerHTML =
         '<div class="yaktube-header">' +
         '<div class="yaktube-header-left">' +
         '<span class="yaktube-badge">🔥 ' +
-        getInstanceName() +
+        escapeHtml(getInstanceName()) +
         ' Akıllı Önerilenler</span>' +
         '<h3 class="yaktube-title-h3" style="margin:0; font-size:1.05rem;">"' +
-        searchQuery +
-        '" için Öneriler Taranıyor...</h3>' +
+        escapeHtml(searchQuery) +
+        '" ve İzleme Geçmişinize Göre Öneriler Hazırlanıyor...</h3>' +
         '</div>' +
         '</div>' +
         '<div style="padding: 18px; text-align: center; color: #ff8f37;">' +
         '<div class="yaktube-spinner" style="width: 30px; height: 30px; border-width: 3px;" aria-hidden="true"></div>' +
-        '<div style="margin-top: 10px; font-size: 13px;">YouTube ve Fediverse\'deki en alakalı videolar getiriliyor...</div>' +
+        '<div style="margin-top: 10px; font-size: 13px;">Bu videoyla, kategorisiyle ve geçmişinizle en alakalı videolar analiz ediliyor...</div>' +
         '</div>';
 
       announce(searchQuery + ' için ilgili video önerileri yükleniyor.');
 
-      fetchPluginJson('/youtube-search?q=' + encodeURIComponent(searchQuery))
+      var smartUrl =
+        '/smart-recommendations?uuid=' +
+        encodeURIComponent(currentUuid) +
+        '&title=' +
+        encodeURIComponent(rawTitle) +
+        '&channel=' +
+        encodeURIComponent(rawChannel) +
+        '&history=' +
+        encodeURIComponent(userHistoryList.join('|'));
+
+      fetchPluginJson(smartUrl)
+        .catch(function () {
+          return fetchPluginJson('/youtube-search?q=' + encodeURIComponent(searchQuery));
+        })
         .then(function (data) {
           if (data && typeof data.guestImportLimit === 'number') {
             cachedGuestImportLimit = data.guestImportLimit;
           }
-          var rawResults = data.results || [];
+          if (data && typeof data.smartPrefetchMode === 'string') {
+            cachedSmartPrefetchMode = data.smartPrefetchMode;
+          }
+          smartHasLocalMatch = Boolean(data && data.hasLocalMatch);
+          smartPrefetchCandidate = (data && data.topPrefetchCandidate) || null;
+          if (smartPrefetchState.videoKey !== thisVideoKey) {
+            smartPrefetchState.videoKey = thisVideoKey;
+            smartPrefetchState.status = 'idle';
+          }
+
+          var rawResults = (data && data.results) || [];
           var normalizedCurrentTitle = rawTitle.toLowerCase().trim();
 
           var uniqueResults = [];
           var seenIds = {};
 
           rawResults.forEach(function (item) {
-            if (item && item.id && !seenIds[item.id] && item.title) {
+            var itemKey = (item && (item.id || (item.localVideo && item.localVideo.uuid))) || '';
+            if (item && itemKey && !seenIds[itemKey] && item.title) {
               var itemTitle = item.title.toLowerCase().trim();
-              if (itemTitle !== normalizedCurrentTitle && !itemTitle.includes(normalizedCurrentTitle)) {
-                seenIds[item.id] = true;
+              if (itemTitle !== normalizedCurrentTitle) {
+                seenIds[itemKey] = true;
                 uniqueResults.push(item);
               }
             }
           });
 
           cachedRelatedResults = uniqueResults;
-          cachedRelatedQuery = searchQuery;
+          cachedRelatedQuery = (data && data.query) || searchQuery;
           currentActiveVideoKey = thisVideoKey;
           relatedShowAll = false;
 
-          renderRelatedCards(container, uniqueResults, searchQuery);
+          renderRelatedCards(container, uniqueResults, cachedRelatedQuery);
 
           var initialCount = Math.min(uniqueResults.length, 12);
           if (uniqueResults.length === 0) {
-            announce(searchQuery + ' için ilgili öneri bulunamadı.');
+            announce(cachedRelatedQuery + ' için ilgili öneri bulunamadı.');
           } else {
             announce(
-              searchQuery +
+              cachedRelatedQuery +
                 ' için ' +
                 initialCount +
-                ' öneri gösteriliyor' +
+                ' alakalı öneri listelendi' +
                 (uniqueResults.length > 12 ? ', toplam ' + uniqueResults.length + ' video bulundu' : '') +
                 '.'
             );
@@ -6247,16 +6697,23 @@ try {
         videoState.hasPlayed = true;
         videoState.explicitlyPausedByClick = false;
         videoState.lastPlayTime = Date.now();
+        clearUpNextOverlay();
         updateMediaSessionMetadata(video);
       });
 
       video.addEventListener('ended', function () {
         videoState.hasPlayed = false;
         videoState.explicitlyPausedByClick = true;
+        try {
+          showPostVideoUpNextOverlay();
+        } catch (e) {}
       });
 
       video.addEventListener('timeupdate', function () {
         updateMediaSessionPosition(video);
+        try {
+          checkSmartPrefetchOnTimeUpdate(video);
+        } catch (e) {}
       });
     }
 

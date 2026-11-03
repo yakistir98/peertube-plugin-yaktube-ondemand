@@ -111,6 +111,16 @@ const DEFAULT_BLOCKED_KEYWORDS = [
   'sheer',
   'babydoll',
   'gravure',
+  'bra',
+  'plus-size bra',
+  'try on',
+  'try-on',
+  'underwear',
+  'panties',
+  'thong',
+  'cleavage',
+  'twerk',
+  'cameltoe',
   'nude',
   'nudes',
   'nudist',
@@ -136,6 +146,7 @@ const DEFAULT_BLOCKED_KEYWORDS = [
   '+18',
   'nsfw',
   'xxx',
+  'xvideos',
   'onlyfans',
   'sissy',
   'seduce',
@@ -181,8 +192,16 @@ function isContentBlocked(text, list = DEFAULT_BLOCKED_KEYWORDS) {
 async function register({ registerHook, getRouter, registerSetting, settingsManager, peertubeHelpers, logger }) {
   const router = getRouter();
 
-  // YakTube Bildirim Filtresi: Başarılı video içe aktarımları (type 7) bildirim kutusunu doldurmasın,
-  // Sadece başarısız olanlar (type 8 / MY_VIDEO_IMPORT_ERROR) bildirim olarak düşsün
+  let guestImportLimit = 5;
+  let maxDiskUsagePercent = 85;
+  let yaknetSsoEnabled = true;
+  let smartPrefetchMode = 'auto-when-no-local';
+  let customChannelId = '';
+  let customYtDlpPath = '';
+  let safeSearchEnabled = true;
+  let blockedKeywordsList = [...DEFAULT_BLOCKED_KEYWORDS];
+
+  // YakTube Bildirim Filtresi & SafeSearch Video Listesi Filtresi
   if (typeof registerHook === 'function') {
     registerHook({
       target: 'filter:notifier.notification.enabled.result',
@@ -196,19 +215,30 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         return result;
       }
     });
-    if (logger)
-      logger.info(
-        '[YakTube OnDemand] Registered filter:notifier.notification.enabled.result (suppressing successful import notifications).'
-      );
-  }
 
-  let guestImportLimit = 5;
-  let maxDiskUsagePercent = 85;
-  let yaknetSsoEnabled = true;
-  let customChannelId = '';
-  let customYtDlpPath = '';
-  let safeSearchEnabled = true;
-  let blockedKeywordsList = [...DEFAULT_BLOCKED_KEYWORDS];
+    const filterVideoListResult = async result => {
+      if (!safeSearchEnabled || !result || !Array.isArray(result.data)) return result;
+      const beforeLen = result.data.length;
+      result.data = result.data.filter(v => !v || !isContentBlocked(v.name || '', blockedKeywordsList));
+      const diff = beforeLen - result.data.length;
+      if (diff > 0 && typeof result.total === 'number') {
+        result.total = Math.max(0, result.total - diff);
+      }
+      return result;
+    };
+
+    registerHook({
+      target: 'filter:api.videos.list.result',
+      handler: filterVideoListResult
+    });
+
+    registerHook({
+      target: 'filter:api.overviews.videos.list.result',
+      handler: filterVideoListResult
+    });
+
+    if (logger) logger.info('[YakTube OnDemand] Registered notification filter & SafeSearch video list hooks.');
+  }
 
   if (typeof registerSetting === 'function') {
     registerSetting({
@@ -223,6 +253,30 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         'YakNet SSO ile tek tıkla oturum açma, YakNet hesap kartı ve merkezi arama geçmişi eşitlemesini etkinleştirir. Bu özelliği kullanmak için peertube-plugin-auth-yaknet eklentisinin de kurulu olması önerilir. Kapatıldığında platform standart bağımsız PeerTube hesap sistemiyle çalışır.',
       private: false,
       default: 'true'
+    });
+
+    registerSetting({
+      name: 'smart-prefetch-mode',
+      label: 'Akıllı Arka Plan Öneri Hazırlama (Smart Pre-Fetch)',
+      type: 'select',
+      options: [
+        {
+          label: 'Otomatik (Önerilen — Yerel benzer video yoksa en alakalı 1. öneriyi arka planda hazırla)',
+          value: 'auto-when-no-local'
+        },
+        {
+          label: 'Her Zaman (İzlenen her videoda en alakalı 1. YouTube önerisini arka planda hazırla)',
+          value: 'always'
+        },
+        {
+          label: 'Kapalı (Sadece kullanıcı İndir ve İzle butonuna tıkladığında aktar)',
+          value: 'disabled'
+        }
+      ],
+      description:
+        'İzleyici bir videoyu en az 25 saniye izlediğinde, sunucuda o konuyla ilgili yerel video yoksa en alakalı 1. YouTube önerisini arka planda sessizce hazırlar. Böylece video bittiğinde alakasız videolar yerine doğrudan ilgili içerik kesintisiz oynatılır. Sunucu kaynaklarını korumak isteyen yöneticiler bu ayarı kapatabilir.',
+      private: false,
+      default: 'auto-when-no-local'
     });
 
     registerSetting({
@@ -397,7 +451,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     };
 
     for (const item of lines) {
-      const lower = item.toLowerCase();
+      const lower = item.toLocaleLowerCase('tr').replace(/i\u0307/g, 'i');
       if (lower === 'tümü' || lower === 'all' || lower === 'hepsi') {
         result.push({
           label: item,
@@ -575,6 +629,15 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     } catch (e) {}
 
     try {
+      const pfVal = await settingsManager.getSetting('smart-prefetch-mode');
+      if (pfVal && ['auto-when-no-local', 'always', 'disabled'].includes(String(pfVal).trim())) {
+        smartPrefetchMode = String(pfVal).trim();
+      } else {
+        smartPrefetchMode = 'auto-when-no-local';
+      }
+    } catch (e) {}
+
+    try {
       const safeVal = await settingsManager.getSetting('safe-search-enabled');
       if (safeVal !== undefined && safeVal !== null) {
         safeSearchEnabled = String(safeVal).trim() !== 'false';
@@ -588,7 +651,11 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
           .split(/[\n,]+/)
           .map(w => w.trim().toLowerCase())
           .filter(Boolean);
-        if (list.length > 0) blockedKeywordsList = list;
+        if (list.length > 0) {
+          blockedKeywordsList = Array.from(new Set([...DEFAULT_BLOCKED_KEYWORDS, ...list]));
+        }
+      } else {
+        blockedKeywordsList = [...DEFAULT_BLOCKED_KEYWORDS];
       }
     } catch (e) {}
   }
@@ -1011,6 +1078,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     return res.json({
       ok: true,
       yaknetSsoEnabled,
+      smartPrefetchMode,
       guestImportLimit,
       maxDiskUsagePercent,
       safeSearchEnabled,
@@ -1051,6 +1119,88 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     return res.json(result);
   });
 
+  // Reusable YouTube Raw Search Helper (with Cache & SafeSearch)
+  function searchYouTubeRaw(query, maxCount = 24) {
+    return new Promise((resolve, reject) => {
+      const cleanQ = (query || '').trim();
+      if (!cleanQ || cleanQ.length < 2) return resolve({ results: [], cached: false });
+      if (safeSearchEnabled && isContentBlocked(cleanQ, blockedKeywordsList)) {
+        return resolve({ results: [], cached: false, blocked: true });
+      }
+
+      const cacheKey = `${cleanQ.toLocaleLowerCase('tr')}__${maxCount}`;
+      const cached = getCached(cacheKey) || (maxCount <= 24 ? getCached(cleanQ) : null);
+      if (cached) {
+        const filteredCached = safeSearchEnabled
+          ? cached.filter(e => !isContentBlocked(e.title, blockedKeywordsList))
+          : cached;
+        return resolve({ results: filteredCached.slice(0, maxCount), cached: true });
+      }
+
+      const ytdlpPath = resolveYtDlpPath(logger, customYtDlpPath);
+      const args = [
+        `ytsearch${maxCount}:${cleanQ}`,
+        '--dump-single-json',
+        '--flat-playlist',
+        '--skip-download',
+        '--no-warnings'
+      ];
+
+      execFile(ytdlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }, (error, stdout) => {
+        if (error) {
+          return reject(error);
+        }
+        try {
+          const rawStr = stdout.trim();
+          const startIdx = rawStr.indexOf('{');
+          const endIdx = rawStr.lastIndexOf('}');
+          if (startIdx === -1 || endIdx === -1) {
+            throw new Error('No JSON object found in output');
+          }
+          const json = JSON.parse(rawStr.substring(startIdx, endIdx + 1));
+          const entries = json.entries || [];
+          let rawResults = entries
+            .filter(e => e && e.id)
+            .map(e => {
+              const duration = e.duration || 0;
+              const mins = Math.floor(duration / 60);
+              const secs = Math.floor(duration % 60);
+              const isLive = e.is_live === true || e.live_status === 'is_live' || (!e.duration && e.was_live !== true);
+              const durationFormatted = isLive
+                ? 'CANLI'
+                : (mins < 10 ? '0' + mins : mins) + ':' + (secs < 10 ? '0' + secs : secs);
+              let thumbnail =
+                e.thumbnail || (e.thumbnails && e.thumbnails.length ? e.thumbnails[e.thumbnails.length - 1].url : '');
+              if (!thumbnail && e.id) {
+                thumbnail = `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`;
+              }
+
+              return {
+                id: e.id,
+                title: e.title,
+                channel: e.uploader || e.channel || 'YouTube',
+                duration,
+                durationFormatted,
+                isLive,
+                url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+                thumbnail
+              };
+            });
+
+          if (safeSearchEnabled) {
+            rawResults = rawResults.filter(e => !isContentBlocked(e.title, blockedKeywordsList));
+          }
+
+          setCache(cacheKey, rawResults);
+          if (maxCount >= 18) setCache(cleanQ, rawResults);
+          return resolve({ results: rawResults, cached: false });
+        } catch (parseErr) {
+          return reject(parseErr);
+        }
+      });
+    });
+  }
+
   // 2. YouTube Search Route (aliases: /youtube-search and /search)
   async function handleYouTubeSearch(req, res) {
     await loadPluginSettings();
@@ -1069,77 +1219,454 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       });
     }
 
-    const cached = getCached(query);
-    if (cached) {
-      const filteredCached = safeSearchEnabled
-        ? cached.filter(e => !isContentBlocked(e.title, blockedKeywordsList))
-        : cached;
-      const enriched = await enrichResultsWithLocalStatus(filteredCached);
-      return res.json({ results: enriched, cached: true, guestImportLimit });
+    try {
+      const { results: rawResults, cached } = await searchYouTubeRaw(query, 24);
+      const enrichedResults = await enrichResultsWithLocalStatus(rawResults);
+      return res.json({ results: enrichedResults, cached, guestImportLimit });
+    } catch (err) {
+      if (logger) logger.error('YouTube search error: ' + err.message);
+      return res.status(500).json({ error: 'Search failed', details: err.message });
     }
-
-    const ytdlpPath = resolveYtDlpPath(logger, customYtDlpPath);
-    const args = ['ytsearch24:' + query, '--dump-single-json', '--flat-playlist', '--skip-download', '--no-warnings'];
-
-    execFile(ytdlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }, async (error, stdout) => {
-      if (error) {
-        if (logger) logger.error('YouTube search error: ' + error.message);
-        return res.status(500).json({ error: 'Search failed', details: error.message });
-      }
-
-      try {
-        const rawStr = stdout.trim();
-        const startIdx = rawStr.indexOf('{');
-        const endIdx = rawStr.lastIndexOf('}');
-        if (startIdx === -1 || endIdx === -1) {
-          throw new Error('No JSON object found in output');
-        }
-        const json = JSON.parse(rawStr.substring(startIdx, endIdx + 1));
-        const entries = json.entries || [];
-        let rawResults = entries
-          .filter(e => e && e.id)
-          .map(e => {
-            const duration = e.duration || 0;
-            const mins = Math.floor(duration / 60);
-            const secs = Math.floor(duration % 60);
-            const isLive = e.is_live === true || e.live_status === 'is_live' || (!e.duration && e.was_live !== true);
-            const durationFormatted = isLive
-              ? 'CANLI'
-              : (mins < 10 ? '0' + mins : mins) + ':' + (secs < 10 ? '0' + secs : secs);
-            let thumbnail =
-              e.thumbnail || (e.thumbnails && e.thumbnails.length ? e.thumbnails[e.thumbnails.length - 1].url : '');
-            if (!thumbnail && e.id) {
-              thumbnail = `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`;
-            }
-
-            return {
-              id: e.id,
-              title: e.title,
-              channel: e.uploader || e.channel || 'YouTube',
-              duration,
-              durationFormatted,
-              isLive,
-              url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
-              thumbnail
-            };
-          });
-
-        if (safeSearchEnabled) {
-          rawResults = rawResults.filter(e => !isContentBlocked(e.title, blockedKeywordsList));
-        }
-
-        setCache(query, rawResults);
-        const enrichedResults = await enrichResultsWithLocalStatus(rawResults);
-        return res.json({ results: enrichedResults, cached: false, guestImportLimit });
-      } catch (parseErr) {
-        if (logger) logger.error('JSON parse error in search: ' + parseErr.message);
-        return res.status(500).json({ error: 'Failed to parse search results' });
-      }
-    });
   }
 
   router.get('/youtube-search', handleYouTubeSearch);
   router.get('/search', handleYouTubeSearch);
+
+  // 2.5. YouTube-Style Smart Recommendation & Personalized Up-Next Engine
+  const RECOMMENDATION_STOP_WORDS = new Set([
+    'official',
+    'video',
+    'klip',
+    'music',
+    'audio',
+    'lyrics',
+    'lyric',
+    'sözleri',
+    'sozleri',
+    'şarkı',
+    'sarki',
+    'hd',
+    '4k',
+    '1080p',
+    'full',
+    'izle',
+    'yeni',
+    'bölüm',
+    'bolum',
+    've',
+    'ile',
+    'için',
+    'icin',
+    'bir',
+    'bu',
+    'da',
+    'de',
+    'mi',
+    'mu',
+    'the',
+    'and',
+    'for',
+    'with',
+    'from',
+    'feat',
+    'ft',
+    'prod',
+    'remix',
+    'version',
+    'canlı',
+    'canli',
+    'performans',
+    'konser',
+    'yaktube',
+    'youtube'
+  ]);
+
+  function extractRecommendationKeywords(text) {
+    const norm = normalizeTitleForMatch(text);
+    if (!norm) return [];
+    return norm
+      .split(/\s+/)
+      .map(w => w.replace(/i\u0307/g, 'i'))
+      .filter(w => w.length >= 3 && !RECOMMENDATION_STOP_WORDS.has(w) && !/^\d+$/.test(w));
+  }
+
+  function formatDurationLabel(seconds) {
+    const dur = Math.max(0, Math.floor(Number(seconds) || 0));
+    const mins = Math.floor(dur / 60);
+    const secs = dur % 60;
+    return (mins < 10 ? '0' + mins : String(mins)) + ':' + (secs < 10 ? '0' + secs : String(secs));
+  }
+
+  router.get('/smart-recommendations', async (req, res) => {
+    await loadPluginSettings();
+    const rawUuid = (req.query.uuid || '').trim();
+    const rawTitle = (req.query.title || '').trim();
+    const rawChannel = (req.query.channel || '').trim();
+    const rawHistory = (req.query.history || '').trim();
+
+    if (!rawTitle && !rawUuid) {
+      return res.json({
+        ok: true,
+        results: [],
+        hasLocalMatch: false,
+        smartPrefetchMode,
+        guestImportLimit
+      });
+    }
+
+    const resolvedUuid = rawUuid ? shortToUuid(rawUuid) : '';
+    let currentVideoRow = null;
+
+    if (resolvedUuid) {
+      try {
+        const currentRows = await dbQuery(
+          `SELECT v.id, v.uuid, v.name, v.category, v."channelId", vi."targetUrl"
+           FROM "video" v
+           LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+           WHERE v.uuid::text = $1 OR v.id::text = $2
+           LIMIT 1`,
+          [resolvedUuid, rawUuid]
+        );
+        if (currentRows.length > 0) {
+          currentVideoRow = currentRows[0];
+        }
+      } catch (e) {}
+    }
+
+    const effectiveTitle = rawTitle || (currentVideoRow && currentVideoRow.name) || '';
+    const normCurrentTitle = normalizeTitleForMatch(effectiveTitle);
+    const currentCategory = currentVideoRow && currentVideoRow.category ? Number(currentVideoRow.category) : null;
+
+    let currentYtId = null;
+    if (currentVideoRow && currentVideoRow.targetUrl) {
+      const m =
+        currentVideoRow.targetUrl.match(/[?&]v=([^&]+)/) ||
+        currentVideoRow.targetUrl.match(/youtu\.be\/([^?]+)/) ||
+        currentVideoRow.targetUrl.match(/shorts\/([^?]+)/);
+      if (m) currentYtId = m[1];
+    }
+
+    // Extract artist/prefix before '-' if present (e.g. "Seda Sayan & Tekir - Gör Bak")
+    let artistPart = '';
+    const dashParts = effectiveTitle.split(/\s+[\-\u2010-\u2015]\s+/);
+    if (dashParts.length >= 2 && dashParts[0].trim().length >= 3) {
+      artistPart = dashParts[0]
+        .replace(/[\(\[].*?[\)\]]/g, '')
+        .replace(/YakTube/gi, '')
+        .trim();
+    } else if (
+      rawChannel &&
+      !/^(yaktube|root|admin|youtube|varsayılan|müzik kanalı|muzik_kanali)$/i.test(rawChannel.trim())
+    ) {
+      artistPart = rawChannel.trim();
+    }
+    const artistNorm = normalizeTitleForMatch(artistPart);
+    const currentKeywords = extractRecommendationKeywords(effectiveTitle);
+
+    // Build clean primary search query for YouTube
+    const cleanTopic = effectiveTitle
+      .replace(/YakTube/gi, '')
+      .replace(/[\(\[].*?[\)\]]/g, '')
+      .replace(/official\s*video|video\s*klip|klip|hd|4k|lyric\s*video|audio|şarkı\s*sözleri|sarki\s*sozleri/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const topicWords = cleanTopic.split(/\s+/).filter(w => w.length >= 2);
+    const primaryQuery = topicWords.slice(0, 5).join(' ') || cleanTopic || effectiveTitle;
+
+    // Parse user watch & search history terms
+    let historyTerms = [];
+    if (rawHistory) {
+      try {
+        const parsed = rawHistory.startsWith('[') ? JSON.parse(rawHistory) : rawHistory.split('|');
+        if (Array.isArray(parsed)) {
+          const defaultIgnore = new Set(['tarkan', 'barış manço', 'yapay zeka', 'canlı haber']);
+          const cleaned = parsed
+            .map(t => String(t || '').trim())
+            .filter(t => t.length >= 3 && (!safeSearchEnabled || !isContentBlocked(t, blockedKeywordsList)));
+          const nonDefaults = cleaned.filter(t => !defaultIgnore.has(t.toLocaleLowerCase('tr')));
+          historyTerms = (nonDefaults.length > 0 ? nonDefaults : cleaned).slice(0, 8);
+        }
+      } catch (e) {}
+    }
+
+    const historyKeywords = Array.from(
+      new Set(historyTerms.flatMap(t => extractRecommendationKeywords(t)).filter(w => w.length >= 3))
+    );
+
+    // Pick a distinct secondary query from user history that isn't identical to primaryQuery
+    let historyQuery = '';
+    const normPrimary = normalizeTitleForMatch(primaryQuery);
+    for (const hTerm of historyTerms) {
+      const normH = normalizeTitleForMatch(hTerm);
+      if (
+        normH &&
+        normH.length >= 3 &&
+        normH !== normPrimary &&
+        !normPrimary.includes(normH) &&
+        !normH.includes(normPrimary)
+      ) {
+        historyQuery = hTerm
+          .replace(/[\(\[].*?[\)\]]/g, '')
+          .split(/\s+/)
+          .slice(0, 4)
+          .join(' ')
+          .trim();
+        if (historyQuery.length >= 3) break;
+      }
+    }
+
+    // 1. Score Local YakTube Videos from PostgreSQL
+    const scoredLocalItems = [];
+    let hasDirectLocalMatch = false;
+
+    try {
+      const localRows = await dbQuery(
+        `SELECT DISTINCT ON (v.id)
+           v.id, v.uuid, v.name, v.category, v.duration, v.views, v."createdAt",
+           t.filename AS "thumbFilename",
+           vi."targetUrl" AS "importUrl"
+         FROM "video" v
+         LEFT JOIN "thumbnail" t ON t."videoId" = v.id
+         LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+         WHERE v.remote = false AND v.state = 1
+         ORDER BY v.id DESC, t.type ASC
+         LIMIT 250`
+      );
+
+      for (const lv of localRows) {
+        if (!lv || !lv.name) continue;
+        if (resolvedUuid && lv.uuid === resolvedUuid) continue;
+        if (currentVideoRow && Number(lv.id) === Number(currentVideoRow.id)) continue;
+        if (safeSearchEnabled && isContentBlocked(lv.name, blockedKeywordsList)) continue;
+
+        const normLv = normalizeTitleForMatch(lv.name);
+        if (!normLv || normLv === normCurrentTitle) continue;
+
+        let lvYtId = null;
+        if (lv.importUrl) {
+          const m =
+            lv.importUrl.match(/[?&]v=([^&]+)/) ||
+            lv.importUrl.match(/youtu\.be\/([^?]+)/) ||
+            lv.importUrl.match(/shorts\/([^?]+)/);
+          if (m) lvYtId = m[1];
+        }
+        if (currentYtId && lvYtId && currentYtId === lvYtId) continue;
+
+        let rawScore = 0;
+        let reasonBadge = '';
+
+        // Artist / channel match
+        if (artistNorm && artistNorm.length >= 3 && normLv.includes(artistNorm)) {
+          rawScore += 65;
+          reasonBadge = '🔥 Aynı Sanatçı / Kanal';
+        }
+
+        // Keyword overlap with current video
+        const lvKeywords = extractRecommendationKeywords(lv.name);
+        let kwOverlap = 0;
+        for (const kw of currentKeywords) {
+          if (lvKeywords.includes(kw) || (kw.length >= 4 && normLv.includes(kw))) {
+            kwOverlap++;
+          }
+        }
+        if (kwOverlap > 0) {
+          rawScore += kwOverlap * 28;
+          if (!reasonBadge) reasonBadge = '🔥 Benzer İçerik';
+        }
+
+        // User watch/search history match
+        let histOverlap = 0;
+        for (const hkw of historyKeywords) {
+          if (lvKeywords.includes(hkw) || (hkw.length >= 4 && normLv.includes(hkw))) {
+            histOverlap++;
+          }
+        }
+        if (histOverlap > 0) {
+          rawScore += Math.min(44, histOverlap * 22);
+          if (!reasonBadge) reasonBadge = '🎯 Geçmişinize Göre';
+        }
+
+        // Same category match (only if category is known)
+        if (currentCategory && lv.category && Number(lv.category) === currentCategory) {
+          rawScore += 20;
+          if (!reasonBadge) reasonBadge = '📂 Aynı Kategoriden';
+        }
+
+        // Strictly exclude completely unrelated videos (score < 20)
+        if (rawScore < 20) continue;
+
+        if (rawScore >= 40) {
+          hasDirectLocalMatch = true;
+        }
+
+        const finalScore = rawScore >= 40 ? rawScore + 35 : 54 + Math.min(10, Math.floor((lv.views || 0) / 10));
+        const thumbUrl = lv.thumbFilename
+          ? `/lazy-static/thumbnails/${lv.thumbFilename}`
+          : lvYtId
+            ? `https://i.ytimg.com/vi/${lvYtId}/hqdefault.jpg`
+            : '/client/assets/images/default-thumbnail.jpg';
+
+        scoredLocalItems.push({
+          id: lvYtId || `local-${lv.uuid}`,
+          title: lv.name,
+          channel: 'YakTube Kütüphanesi',
+          duration: lv.duration || 0,
+          durationFormatted: formatDurationLabel(lv.duration || 0),
+          isLive: false,
+          isDownloaded: true,
+          reasonBadge: reasonBadge ? `✅ ${reasonBadge.replace(/^[🔥🎯📂]\s*/, '')}` : "✅ YakTube'da İzle",
+          relevanceScore: finalScore,
+          url: lv.importUrl || `/videos/watch/${lv.uuid}`,
+          thumbnail: thumbUrl,
+          localVideo: {
+            id: lv.id,
+            uuid: lv.uuid,
+            name: lv.name,
+            url: `/videos/watch/${lv.uuid}`
+          }
+        });
+      }
+    } catch (e) {
+      if (logger) logger.warn('[YakTube SmartRec] Local DB query warning: ' + e.message);
+    }
+
+    // 2. Query YouTube On-Demand for Current Video Topic + User History in Parallel
+    let primaryYtResults = [];
+    let historyYtResults = [];
+
+    try {
+      const tasks = [searchYouTubeRaw(primaryQuery, 18).catch(() => ({ results: [] }))];
+      if (historyQuery && (!safeSearchEnabled || !isContentBlocked(historyQuery, blockedKeywordsList))) {
+        tasks.push(searchYouTubeRaw(historyQuery, 8).catch(() => ({ results: [] })));
+      }
+      const [primaryRes, historyRes] = await Promise.all(tasks);
+      primaryYtResults = await enrichResultsWithLocalStatus((primaryRes && primaryRes.results) || []);
+      if (historyRes && historyRes.results && historyRes.results.length > 0) {
+        historyYtResults = await enrichResultsWithLocalStatus(historyRes.results);
+      }
+    } catch (e) {}
+
+    const scoredYtItems = [];
+
+    // Score primary topic YouTube results
+    primaryYtResults.forEach((item, idx) => {
+      if (!item || !item.id || !item.title) return;
+      if (currentYtId && item.id === currentYtId) return;
+      const normItem = normalizeTitleForMatch(item.title);
+      if (!normItem || normItem === normCurrentTitle) return;
+
+      let score = Math.max(55, 76 - idx * 1.5);
+      let badge = '🔥 Benzer İçerik';
+
+      if (
+        artistNorm &&
+        artistNorm.length >= 3 &&
+        (normItem.includes(artistNorm) || normalizeTitleForMatch(item.channel).includes(artistNorm))
+      ) {
+        score += 14;
+        badge = '🔥 Aynı Sanatçı / Kanal';
+      }
+
+      const itemKws = extractRecommendationKeywords(item.title);
+      let histHits = 0;
+      for (const hkw of historyKeywords) {
+        if (itemKws.includes(hkw)) histHits++;
+      }
+      if (histHits > 0) {
+        score += 8;
+      }
+
+      if (item.isDownloaded && item.localVideo) {
+        score += 25;
+        hasDirectLocalMatch = true;
+        badge = "✅ YakTube'da İzle";
+      }
+
+      scoredYtItems.push({
+        ...item,
+        reasonBadge: badge,
+        relevanceScore: score,
+        sourceType: 'topic'
+      });
+    });
+
+    // Score personalized history YouTube results
+    historyYtResults.forEach((item, idx) => {
+      if (!item || !item.id || !item.title) return;
+      if (currentYtId && item.id === currentYtId) return;
+      const normItem = normalizeTitleForMatch(item.title);
+      if (!normItem || normItem === normCurrentTitle) return;
+
+      let score = Math.max(50, 68 - idx * 2);
+      let badge = '🎯 Geçmişinize Göre';
+
+      if (item.isDownloaded && item.localVideo) {
+        score += 22;
+        badge = '✅ Geçmişinize Göre';
+      }
+
+      scoredYtItems.push({
+        ...item,
+        reasonBadge: badge,
+        relevanceScore: score,
+        sourceType: 'history'
+      });
+    });
+
+    // 3. Merge, Deduplicate & Rank
+    const combined = [...scoredLocalItems, ...scoredYtItems];
+    combined.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+
+    const finalResults = [];
+    const seenIds = new Set();
+    const seenUuids = new Set();
+    const seenNormTitles = new Set();
+
+    for (const item of combined) {
+      const normT = normalizeTitleForMatch(item.title);
+      if (!normT || normT === normCurrentTitle) continue;
+      if (item.id && seenIds.has(item.id)) continue;
+      if (item.localVideo && item.localVideo.uuid && seenUuids.has(item.localVideo.uuid)) continue;
+      if (seenNormTitles.has(normT)) continue;
+
+      if (item.id) seenIds.add(item.id);
+      if (item.localVideo && item.localVideo.uuid) seenUuids.add(item.localVideo.uuid);
+      seenNormTitles.add(normT);
+
+      finalResults.push(item);
+      if (finalResults.length >= 24) break;
+    }
+
+    // Identify #1 undownloaded topic match for optional background smart pre-fetch
+    const topPrefetchCandidate =
+      finalResults.find(
+        it =>
+          !it.isDownloaded &&
+          !it.isLive &&
+          it.url &&
+          (it.url.includes('youtube.com') || it.url.includes('youtu.be')) &&
+          (!it.duration || it.duration <= 900) // Only pre-fetch videos <= 15 mins to respect server storage/bandwidth
+      ) || null;
+
+    return res.json({
+      ok: true,
+      query: primaryQuery,
+      historyQuery: historyQuery || null,
+      hasLocalMatch: hasDirectLocalMatch,
+      smartPrefetchMode,
+      topPrefetchCandidate: topPrefetchCandidate
+        ? {
+            id: topPrefetchCandidate.id,
+            title: topPrefetchCandidate.title,
+            url: topPrefetchCandidate.url,
+            channel: topPrefetchCandidate.channel
+          }
+        : null,
+      guestImportLimit,
+      results: finalResults
+    });
+  });
 
   // 3. On-Demand Video Import Route (aliases: /ondemand-import and /import)
   async function handleOnDemandImport(req, res) {
