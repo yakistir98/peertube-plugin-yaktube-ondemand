@@ -1,3 +1,4 @@
+var cachedYakNetSsoEnabled = null;
 // 100% Incompatible Browser Suppression & Error Guardian
 // CRITICAL: PeerTube's Angular app (my-app ngOnInit) relies on document.getElementById('incompatible-browser')
 // to exist so it can do .className += " browser-ok" before calling this.loadUser()!
@@ -582,6 +583,10 @@ try {
               btn.setAttribute('tabindex', '-1');
             });
 
+          if (!isYakNetSsoEnabled()) {
+            if (liveWidget) liveWidget.remove();
+            return;
+          }
           if (!liveWidget && isOfficialYakTubeServer()) {
             var widgetWrap = document.createElement('div');
             widgetWrap.id = 'yaknet-header-account-widget';
@@ -684,7 +689,7 @@ try {
               btn.removeAttribute('tabindex');
 
               var loginAnchor = btn.tagName.toLowerCase() === 'a' ? btn : btn.querySelector('a');
-              if (loginAnchor) {
+              if (loginAnchor && isYakNetSsoEnabled()) {
                 loginAnchor.setAttribute('aria-label', 'YakNet ile Giriş Yap');
                 loginAnchor.setAttribute('title', 'YakNet ile Giriş Yap');
                 var spanText = loginAnchor.querySelector('span');
@@ -707,7 +712,7 @@ try {
         document.querySelector('form[action*="login"]') ||
         document.querySelector('my-login-modal');
 
-      if (loginCard && !document.getElementById('yaknet-login-section')) {
+      if (loginCard && isYakNetSsoEnabled() && !document.getElementById('yaknet-login-section')) {
         var isLocalLogin = window.location.search.includes('local=true') || window.location.pathname.includes('/admin');
 
         var ssoBox = document.createElement('div');
@@ -3619,6 +3624,9 @@ try {
           if (d && typeof d.guestImportLimit === 'number') {
             cachedGuestImportLimit = d.guestImportLimit;
           }
+          if (d && typeof d.yaknetSsoEnabled === 'boolean') {
+            cachedYakNetSsoEnabled = d.yaknetSsoEnabled;
+          }
           if (d && Array.isArray(d.categories) && d.categories.length > 0) {
             cachedCategories = d.categories;
             try {
@@ -5037,9 +5045,12 @@ try {
         '<div style="display: flex; align-items: center; gap: 8px;">';
 
       if (loggedIn) {
+        var isYakNet = isYakNetSsoEnabled();
         var syncTitle = syncEnabled
-          ? 'YakNet Bulut Eşitlemesi Aktif (Tüm cihazlarınızda senkronize edilir. Kapatmak için tıklayın.)'
-          : 'Eşitleme Kapalı (Aramalar sadece bu cihazda saklanır. Açmak için tıklayın.)';
+          ? isYakNet
+            ? 'YakNet Bulut Eşitlemesi Aktif (Tüm cihazlarınızda senkronize edilir)'
+            : 'Hesap Arama Eşitlemesi Aktif (Sunucu hesabınızla senkronize edilir)'
+          : 'Eşitleme Kapalı (Aramalar sadece bu cihazda saklanır)';
         var syncText = syncEnabled ? '☁️ Eşitleme: Açık' : '☁️ Eşitleme: Kapalı';
         var syncBg = syncEnabled ? '#0f766e' : '#334155';
         var syncColor = syncEnabled ? '#5eead4' : '#94a3b8';
@@ -6120,6 +6131,11 @@ try {
       });
 
       headerButtons.prepend(installBtn);
+    }
+
+    function isYakNetSsoEnabled() {
+      if (cachedYakNetSsoEnabled !== null) return cachedYakNetSsoEnabled;
+      return isOfficialYakTubeServer();
     }
 
     function isOfficialYakTubeServer() {

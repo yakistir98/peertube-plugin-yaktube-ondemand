@@ -204,12 +204,27 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
   let guestImportLimit = 5;
   let maxDiskUsagePercent = 85;
+  let yaknetSsoEnabled = true;
   let customChannelId = '';
   let customYtDlpPath = '';
   let safeSearchEnabled = true;
   let blockedKeywordsList = [...DEFAULT_BLOCKED_KEYWORDS];
 
   if (typeof registerSetting === 'function') {
+    registerSetting({
+      name: 'enable-yaknet-sso',
+      label: 'YakNet SSO ve Merkezi Hesap Entegrasyonu',
+      type: 'select',
+      options: [
+        { label: 'Açık (Resmi YakNet Giriş & Hesap Entegrasyonu)', value: 'true' },
+        { label: 'Kapalı (Standart Bağımsız PeerTube Girişi)', value: 'false' }
+      ],
+      description:
+        'YakNet SSO ile tek tıkla oturum açma, YakNet hesap kartı ve merkezi arama geçmişi eşitlemesini etkinleştirir. Bu özelliği kullanmak için peertube-plugin-auth-yaknet eklentisinin de kurulu olması önerilir. Kapatıldığında platform standart bağımsız PeerTube hesap sistemiyle çalışır.',
+      private: false,
+      default: 'true'
+    });
+
     registerSetting({
       name: 'safe-search-enabled',
       label: 'Güvenli Okul & Aile Araması (SafeSearch)',
@@ -548,6 +563,15 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
           'Tümü, Müzik, Oyun, Canlı, Rap yapma, Evcil hayvanlar, Komedi skeç gösterileri, Doğa, Futbol, Son yüklenenler, İzlenenler, Yeni öneriler';
       }
       parsedHomeCategories = parseHomeCategories(rawHomeCategories);
+    } catch (e) {}
+
+    try {
+      const ssoVal = await settingsManager.getSetting('enable-yaknet-sso');
+      if (ssoVal !== undefined && ssoVal !== null) {
+        yaknetSsoEnabled = String(ssoVal).trim() !== 'false';
+      } else {
+        yaknetSsoEnabled = true;
+      }
     } catch (e) {}
 
     try {
@@ -986,6 +1010,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     await loadPluginSettings();
     return res.json({
       ok: true,
+      yaknetSsoEnabled,
       guestImportLimit,
       maxDiskUsagePercent,
       safeSearchEnabled,
