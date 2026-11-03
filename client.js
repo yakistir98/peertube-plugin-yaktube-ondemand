@@ -2283,15 +2283,33 @@ try {
 
     function sanitizeWatchPageLabels(videoTitle) {
       // 1. Next Video button in Video.js control bar
+      var firstRec =
+        typeof window.__yaktube_get_first_smart_rec === 'function' ? window.__yaktube_get_first_smart_rec() : null;
+      var nextLabel =
+        firstRec && firstRec.title
+          ? 'Sonraki Video (İlk Öneri): ' + firstRec.title + ' (Shift+N)'
+          : 'Sonraki Video (Shift+N)';
       var nextBtns = document.querySelectorAll(
-        '.vjs-next-video-control, .vjs-next-control, button[title*="Next video"], button[aria-label*="Next video"]'
+        '.vjs-next-video, .vjs-next-video-control, .vjs-next-control, button[title*="Next video"], button[aria-label*="Next video"]'
       );
       nextBtns.forEach(function (btn) {
-        btn.setAttribute('aria-label', 'Sonraki Video (Shift+N)');
-        btn.setAttribute('title', 'Sonraki Video (Shift+N)');
+        if (
+          firstRec &&
+          !(typeof window.__yaktube_is_playlist_watch === 'function' && window.__yaktube_is_playlist_watch())
+        ) {
+          btn.classList.remove('vjs-disabled');
+          btn.classList.remove('vjs-hidden');
+          btn.removeAttribute('disabled');
+        }
+        if (btn.getAttribute('aria-label') !== nextLabel) {
+          btn.setAttribute('aria-label', nextLabel);
+        }
+        if (btn.getAttribute('title') !== nextLabel) {
+          btn.setAttribute('title', nextLabel);
+        }
         var ctrlText = btn.querySelector('.vjs-control-text');
-        if (ctrlText && ctrlText.textContent.includes('Next video')) {
-          ctrlText.textContent = 'Sonraki Video (Shift+N)';
+        if (ctrlText && ctrlText.textContent !== nextLabel) {
+          ctrlText.textContent = nextLabel;
         }
       });
 
@@ -2769,11 +2787,18 @@ try {
               return;
             }
 
-            // Shift+N: Next Video
+            // Shift+N: Next Video (Smart First Recommendation)
             if (e.shiftKey && (e.key === 'n' || e.key === 'N')) {
               e.preventDefault();
               e.stopPropagation();
-              var nextBtn = document.querySelector('.vjs-next-video-control, .vjs-next-control');
+              if (
+                !(typeof window.__yaktube_is_playlist_watch === 'function' && window.__yaktube_is_playlist_watch()) &&
+                typeof window.__yaktube_play_next_smart__ === 'function'
+              ) {
+                window.__yaktube_play_next_smart__('player-shortcut-shift-n');
+                return;
+              }
+              var nextBtn = document.querySelector('.vjs-next-video, .vjs-next-video-control, .vjs-next-control');
               if (nextBtn) {
                 nextBtn.click();
                 announce('Sonraki videoya geçiliyor...');
@@ -2827,9 +2852,22 @@ try {
       bar.setAttribute('role', 'toolbar');
       bar.setAttribute('aria-label', 'Video Araçları ve Ek Özellikler');
 
+      var initialAutoPlay = true;
+      try {
+        initialAutoPlay = localStorage.getItem('yaktube_smart_autoplay') !== 'false';
+      } catch (e) {}
+
       bar.innerHTML =
         '<span class="yaktube-player-bar-label">🛠️ Video Araçları:</span>' +
         '<button id="yaktube-bar-back-btn" class="yaktube-player-action-btn" aria-label="Önceki Sayfaya Geri Dön (Alt+Sol Ok)" title="Önceki Sayfaya Geri Dön (Alt+Sol Ok)">⬅️ Geri Dön</button>' +
+        '<button id="yaktube-bar-next-btn" class="yaktube-player-action-btn" aria-label="Sıradaki İlk Önerilen Videoyu Oynat (Shift+N)" title="Sıradaki İlk Önerilen Videoyu Oynat (Shift+N)">⏭️ Sonraki</button>' +
+        '<button id="yaktube-bar-autoplay-btn" class="yaktube-player-action-btn" role="switch" aria-checked="' +
+        (initialAutoPlay ? 'true' : 'false') +
+        '" aria-label="Akıllı Otomatik Oynatma: ' +
+        (initialAutoPlay ? 'Açık' : 'Kapalı') +
+        '" title="Video bittiğinde ilk öneriyi otomatik oynat">' +
+        (initialAutoPlay ? '🔁 Oto-Oynat: Açık' : '🔁 Oto-Oynat: Kapalı') +
+        '</button>' +
         '<button id="yaktube-bar-speed-btn" class="yaktube-player-action-btn" aria-label="Oynatma Hızını Değiştir (Alt+.)">⚡ Hız</button>' +
         '<button id="yaktube-bar-sleep-btn" class="yaktube-player-action-btn" aria-label="Uyku Zamanlayıcısı (Alt+U)">⏱️ Uyku</button>' +
         '<button id="yaktube-bar-qr-btn" class="yaktube-player-action-btn" aria-label="Telefonda Devam Et / QR Kod (Alt+Q)">📱 Telefonda Aç</button>' +
@@ -2866,6 +2904,24 @@ try {
             window.history.back();
           } else {
             window.location.href = '/videos/overview';
+          }
+        });
+      }
+
+      var nextBarBtn = bar.querySelector('#yaktube-bar-next-btn');
+      if (nextBarBtn) {
+        nextBarBtn.addEventListener('click', function () {
+          if (typeof window.__yaktube_play_next_smart__ === 'function') {
+            window.__yaktube_play_next_smart__('action-bar-next');
+          }
+        });
+      }
+
+      var autoPlayBarBtn = bar.querySelector('#yaktube-bar-autoplay-btn');
+      if (autoPlayBarBtn) {
+        autoPlayBarBtn.addEventListener('click', function () {
+          if (typeof window.__yaktube_toggle_smart_autoplay__ === 'function') {
+            window.__yaktube_toggle_smart_autoplay__();
           }
         });
       }
@@ -3146,6 +3202,19 @@ try {
       } else if ((alt && (e.key === ',' || e.key === '<')) || e.key === '<') {
         e.preventDefault();
         adjustPlaybackSpeed(false);
+      }
+      // Next Video: Shift+N or Alt+N (Plays #1 Smart Recommendation)
+      else if ((e.shiftKey && key === 'n') || (alt && key === 'n')) {
+        e.preventDefault();
+        if (
+          !(typeof window.__yaktube_is_playlist_watch === 'function' && window.__yaktube_is_playlist_watch()) &&
+          typeof window.__yaktube_play_next_smart__ === 'function'
+        ) {
+          window.__yaktube_play_next_smart__('global-shortcut-shift-n');
+        } else {
+          var nextBtnGlobal = document.querySelector('.vjs-next-video, .vjs-next-video-control, .vjs-next-control');
+          if (nextBtnGlobal) nextBtnGlobal.click();
+        }
       }
       // Percentage Jumps (0 - 9)
       else if (key >= '0' && key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -5696,12 +5765,178 @@ try {
 
     var showNativeFediverseDrawer = false;
 
+    function isPlaylistWatch() {
+      if (typeof window === 'undefined' || !window.location) return false;
+      var p = window.location.pathname || '';
+      var s = window.location.search || '';
+      return p.includes('/w/p/') || s.includes('playlistPosition=') || s.includes('videoPlaylist=');
+    }
+    window.__yaktube_is_playlist_watch = isPlaylistWatch;
+
+    function isYakTubeAutoplayEnabled() {
+      try {
+        return localStorage.getItem('yaktube_smart_autoplay') !== 'false';
+      } catch (e) {
+        return true;
+      }
+    }
+
+    function setYakTubeAutoplayEnabled(enabled) {
+      var val = Boolean(enabled);
+      try {
+        localStorage.setItem('yaktube_smart_autoplay', val ? 'true' : 'false');
+      } catch (e) {}
+      syncPlayerNextButtonAndAutoplayUI();
+      var relContainer = document.getElementById('yaktube-hybrid-related-container');
+      if (relContainer && cachedRelatedResults && cachedRelatedResults.length > 0) {
+        renderRelatedCards(relContainer, cachedRelatedResults, cachedRelatedQuery);
+      }
+      announce(
+        val
+          ? 'Akıllı otomatik oynatma açıldı. Video bittiğinde ilk öneri otomatik oynatılacak.'
+          : 'Akıllı otomatik oynatma kapatıldı.'
+      );
+      showQuickToast(val ? '🔁 Otomatik Oynatma: Açık' : '🔁 Otomatik Oynatma: Kapalı');
+    }
+
+    function toggleYakTubeAutoplay() {
+      setYakTubeAutoplayEnabled(!isYakTubeAutoplayEnabled());
+    }
+    window.__yaktube_toggle_smart_autoplay__ = toggleYakTubeAutoplay;
+
+    function getFirstSmartRecommendation() {
+      if (cachedRelatedResults && cachedRelatedResults.length > 0 && cachedRelatedResults[0]) {
+        return cachedRelatedResults[0];
+      }
+      return null;
+    }
+    window.__yaktube_get_first_smart_rec = getFirstSmartRecommendation;
+
+    function playFirstSmartRecommendation(triggerSource) {
+      clearUpNextOverlay();
+      var nextItem = getFirstSmartRecommendation();
+      if (!nextItem) {
+        announce('Henüz sıradaki öneri hazır değil.');
+        showQuickToast('⏳ Öneriler yükleniyor...');
+        return false;
+      }
+
+      if (nextItem.isDownloaded && nextItem.localVideo && nextItem.localVideo.url) {
+        announce('Sıradaki ilk öneri oynatılıyor: ' + (nextItem.title || ''));
+        showQuickToast('⏭️ ' + (nextItem.title || 'Sıradaki Video'));
+        currentActiveVideoKey = null;
+        window.location.href = nextItem.localVideo.url;
+        return true;
+      }
+
+      if (nextItem.url) {
+        announce(
+          'Sıradaki ilk öneri ' + getInstanceName() + "'a aktarılıp hemen oynatılıyor: " + (nextItem.title || '')
+        );
+        showQuickToast('📥 İlk öneri hazırlanıp oynatılıyor...');
+        var existingCardBtn = null;
+        var relContainer = document.getElementById('yaktube-hybrid-related-container');
+        if (relContainer) {
+          existingCardBtn = relContainer.querySelector('.yaktube-related-import');
+        }
+        var targetBtn = existingCardBtn || document.createElement('button');
+        handleImport(nextItem.url, targetBtn, nextItem.title || 'Sıradaki Video');
+        return true;
+      }
+
+      return false;
+    }
+    window.__yaktube_play_next_smart__ = playFirstSmartRecommendation;
+
+    function syncPlayerNextButtonAndAutoplayUI() {
+      var firstRec = getFirstSmartRecommendation();
+      var autoOn = isYakTubeAutoplayEnabled();
+
+      var barAutoBtn = document.getElementById('yaktube-bar-autoplay-btn');
+      if (barAutoBtn) {
+        barAutoBtn.setAttribute('aria-checked', autoOn ? 'true' : 'false');
+        barAutoBtn.setAttribute('aria-label', 'Akıllı Otomatik Oynatma: ' + (autoOn ? 'Açık' : 'Kapalı'));
+        barAutoBtn.textContent = autoOn ? '🔁 Oto-Oynat: Açık' : '🔁 Oto-Oynat: Kapalı';
+      }
+
+      var barNextBtn = document.getElementById('yaktube-bar-next-btn');
+      if (barNextBtn) {
+        var barNextLabel =
+          firstRec && firstRec.title
+            ? 'Sıradaki İlk Öneri: ' + firstRec.title + ' (Shift+N)'
+            : 'Sıradaki İlk Önerilen Videoyu Oynat (Shift+N)';
+        barNextBtn.setAttribute('aria-label', barNextLabel);
+        barNextBtn.setAttribute('title', barNextLabel);
+      }
+
+      if (!isPlaylistWatch()) {
+        // Hide PeerTube's native Fediverse upnext overlay inside Video.js so YakTube Smart Autoplay handles it
+        var nativeUpNext = document.querySelectorAll('.vjs-upnext-content');
+        nativeUpNext.forEach(function (el) {
+          el.style.setProperty('display', 'none', 'important');
+          el.setAttribute('aria-hidden', 'true');
+        });
+
+        var nextBtns = document.querySelectorAll('.vjs-next-video, .vjs-next-video-control, .vjs-next-control');
+        nextBtns.forEach(function (btn) {
+          if (firstRec) {
+            btn.classList.remove('vjs-disabled');
+            btn.classList.remove('vjs-hidden');
+            btn.removeAttribute('disabled');
+            var lbl = 'Sonraki Video (İlk Öneri): ' + (firstRec.title || '') + ' (Shift+N)';
+            btn.setAttribute('aria-label', lbl);
+            btn.setAttribute('title', lbl);
+            var ctrlTxt = btn.querySelector('.vjs-control-text');
+            if (ctrlTxt) ctrlTxt.textContent = lbl;
+          }
+        });
+      }
+    }
+
+    // Intercept clicks & keydowns on Video.js native ".vjs-next-video" button so it plays #1 Smart Recommendation instead of Fediverse
+    document.addEventListener(
+      'click',
+      function (e) {
+        if (!e.target || typeof e.target.closest !== 'function') return;
+        var nextBtn = e.target.closest(
+          '.vjs-next-video, .vjs-next-video-control, .vjs-next-control, .vjs-upnext-autoplay-icon'
+        );
+        if (nextBtn && !isPlaylistWatch() && getFirstSmartRecommendation()) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          playFirstSmartRecommendation('vjs-next-button');
+        }
+      },
+      true
+    );
+
+    document.addEventListener(
+      'keydown',
+      function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (!e.target || typeof e.target.closest !== 'function') return;
+        var nextBtn = e.target.closest(
+          '.vjs-next-video, .vjs-next-video-control, .vjs-next-control, .vjs-upnext-autoplay-icon'
+        );
+        if (nextBtn && !isPlaylistWatch() && getFirstSmartRecommendation()) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          playFirstSmartRecommendation('vjs-next-button-key');
+        }
+      },
+      true
+    );
+
     function suppressUnrelatedNativeRecommendations() {
       try {
         // Prevent PeerTube's native player from auto-redirecting to unrelated foreign/federated videos on video end
         localStorage.setItem('auto-play-video', 'false');
         sessionStorage.setItem('auto-play-video', 'false');
       } catch (e) {}
+
+      syncPlayerNextButtonAndAutoplayUI();
 
       var shouldShowNativeList =
         cachedFederatedRecommendationsMode === 'show-all' ||
@@ -5738,9 +5973,10 @@ try {
       var displayed = results.slice(0, limit);
 
       var cardsHtml = '';
-      displayed.forEach(function (item) {
+      displayed.forEach(function (item, idx) {
         var isLocal = !!item.isDownloaded;
         var isFed = !!item.isFederated;
+        var isFirstRec = idx === 0;
         var badgeLabel =
           item.reasonBadge ||
           (isFed ? "🌐 Fediverse'de İzle" : isLocal ? '✅ ' + getInstanceName() + "'da İzle" : '🔥 Benzer İçerik');
@@ -5754,7 +5990,12 @@ try {
               ? 'background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff;'
               : 'background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); color: #fff;';
 
+        var firstBadgeHtml = isFirstRec
+          ? '<span class="yaktube-badge" style="background: #ff8f37; color: #000; margin-bottom: 4px; margin-right: 4px; display: inline-block; font-size:10px; padding:2px 7px; font-weight:800;">⏭️ İLK ÖNERİ</span>'
+          : '';
+
         var statusBadge =
+          firstBadgeHtml +
           '<span class="yaktube-badge" style="' +
           badgeStyle +
           ' margin-bottom: 4px; display: inline-block; font-size:10px; padding:2px 8px; font-weight:700;">' +
@@ -5788,9 +6029,18 @@ try {
               '\'a indir ve izle">📥 İndir ve İzle</button>';
 
         var cardLabel =
-          item.title + ' (' + badgeLabel + '), ' + item.channel + ' kanalı, Süre: ' + (item.durationFormatted || '');
+          (isFirstRec ? 'İlk Öneri: ' : '') +
+          item.title +
+          ' (' +
+          badgeLabel +
+          '), ' +
+          item.channel +
+          ' kanalı, Süre: ' +
+          (item.durationFormatted || '');
         cardsHtml +=
-          '<div class="yaktube-card" role="article" tabindex="0" style="margin-bottom:10px;" aria-label="' +
+          '<div class="yaktube-card" role="article" tabindex="0" style="margin-bottom:10px;' +
+          (isFirstRec ? ' border: 1.5px solid rgba(255,143,55,0.65);' : '') +
+          '" aria-label="' +
           cardLabel.replace(/"/g, '&quot;') +
           '">' +
           '<div class="yaktube-thumb-wrap">' +
@@ -5861,6 +6111,11 @@ try {
         }
       }
 
+      var autoPlayEnabled = isYakTubeAutoplayEnabled();
+      var autoPlayBtnStyle = autoPlayEnabled
+        ? 'background:rgba(16,185,129,0.18); border-color:#10b981; color:#6ee7b7; font-weight:700;'
+        : 'background:rgba(148,163,184,0.12); border-color:rgba(148,163,184,0.35); color:#cbd5e1;';
+
       container.innerHTML =
         '<div class="yaktube-header" style="flex-wrap:wrap; gap:8px;">' +
         '<div class="yaktube-header-left" style="flex-wrap:wrap; gap:8px;">' +
@@ -5874,15 +6129,43 @@ try {
         ')</h3>' +
         prefetchStatusHtml +
         '</div>' +
+        '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+        '<button id="yaktube-related-play-first-btn" class="yaktube-shortcuts-btn" style="background:rgba(255,143,55,0.16); border-color:#ff8f37; color:#fff; font-weight:700;" aria-label="Sıradaki ilk önerilen videoyu oynat (Shift+N)" title="Sıradaki ilk önerilen videoyu oynat (Shift+N)">' +
+        '⏭️ İlk Öneriyi Oynat' +
+        '</button>' +
+        '<button id="yaktube-related-autoplay-btn" class="yaktube-shortcuts-btn" role="switch" aria-checked="' +
+        (autoPlayEnabled ? 'true' : 'false') +
+        '" style="' +
+        autoPlayBtnStyle +
+        '" aria-label="Akıllı Otomatik Oynatma: ' +
+        (autoPlayEnabled ? 'Açık' : 'Kapalı') +
+        '" title="Video bittiğinde ilk öneriyi otomatik oynat">' +
+        (autoPlayEnabled ? '🔁 Otomatik Oynat: Açık' : '🔁 Otomatik Oynat: Kapalı') +
+        '</button>' +
         '<button id="yaktube-related-refresh-btn" class="yaktube-shortcuts-btn" aria-label="Önerileri Yenile">' +
         '🔄 Yenile' +
         '</button>' +
+        '</div>' +
         '</div>' +
         '<div class="yaktube-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px;">' +
         cardsHtml +
         '</div>' +
         loadMoreBtn +
         fediverseDrawerBtn;
+
+      var playFirstBtn = document.getElementById('yaktube-related-play-first-btn');
+      if (playFirstBtn) {
+        playFirstBtn.addEventListener('click', function () {
+          playFirstSmartRecommendation('related-header-btn');
+        });
+      }
+
+      var autoPlayHeaderBtn = document.getElementById('yaktube-related-autoplay-btn');
+      if (autoPlayHeaderBtn) {
+        autoPlayHeaderBtn.addEventListener('click', function () {
+          toggleYakTubeAutoplay();
+        });
+      }
 
       var toggleBtn = document.getElementById('yaktube-related-toggle-more');
       if (toggleBtn) {
@@ -6045,16 +6328,29 @@ try {
     }
 
     function checkSmartPrefetchOnTimeUpdate(video) {
-      if (!video || !currentActiveVideoKey || !smartPrefetchCandidate) return;
+      if (!video || !currentActiveVideoKey) return;
       if (smartPrefetchState.videoKey === currentActiveVideoKey && smartPrefetchState.status !== 'idle') return;
       if (cachedSmartPrefetchMode === 'disabled') return;
-      if (cachedSmartPrefetchMode === 'auto-when-no-local' && smartHasLocalMatch) return;
+
+      var firstRec = getFirstSmartRecommendation();
+      var firstNeedsPrefetch = Boolean(firstRec && !firstRec.isDownloaded && firstRec.url);
+      var targetCandidate = firstNeedsPrefetch ? firstRec : smartPrefetchCandidate;
+      if (!targetCandidate) return;
+
+      // If #1 recommendation is not downloaded yet and autoplay is enabled, always pre-fetch #1 so autoplay is instant!
+      if (
+        cachedSmartPrefetchMode === 'auto-when-no-local' &&
+        smartHasLocalMatch &&
+        !(firstNeedsPrefetch && isYakTubeAutoplayEnabled())
+      ) {
+        return;
+      }
 
       var cur = video.currentTime || 0;
       var dur = video.duration || 0;
-      var threshold = dur > 0 && dur < 65 ? Math.max(8, dur * 0.35) : 25;
+      var threshold = dur > 0 && dur < 65 ? Math.max(8, dur * 0.35) : 20;
       if (cur >= threshold) {
-        triggerSilentBackgroundPrefetch(smartPrefetchCandidate, currentActiveVideoKey);
+        triggerSilentBackgroundPrefetch(targetCandidate, currentActiveVideoKey);
       }
     }
 
@@ -6071,19 +6367,16 @@ try {
       clearUpNextOverlay();
       if (!cachedRelatedResults || cachedRelatedResults.length === 0) return;
 
-      // Pick #1 ready local match first; otherwise #1 topic match
-      var nextItem =
-        cachedRelatedResults.find(function (it) {
-          return it && it.isDownloaded && it.localVideo && it.localVideo.url;
-        }) || cachedRelatedResults[0];
-
+      // Always pick the very first recommendation (#1 in Smart Recommendations)
+      var nextItem = getFirstSmartRecommendation();
       if (!nextItem) return;
 
       var isReadyLocal = !!(nextItem.isDownloaded && nextItem.localVideo && nextItem.localVideo.url);
+      var autoPlayOn = isYakTubeAutoplayEnabled();
       var banner = document.createElement('div');
       banner.id = 'yaktube-upnext-overlay';
       banner.setAttribute('role', 'region');
-      banner.setAttribute('aria-label', 'Sıradaki İlgili Video Önerisi');
+      banner.setAttribute('aria-label', 'Sıradaki İlk Önerilen Video');
       banner.style.cssText =
         'margin: 14px 0 18px 0; padding: 16px 20px; border-radius: 14px; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 2px solid #ff8f37; box-shadow: 0 10px 30px rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;';
 
@@ -6101,7 +6394,7 @@ try {
         '" alt="" style="width:96px; height:56px; object-fit:cover; border-radius:8px; flex-shrink:0; border:1px solid rgba(255,255,255,0.15);" onerror="this.src=\'/client/assets/images/default-thumbnail.jpg\'" />' +
         '<div style="min-width:0;">' +
         '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">' +
-        '<span style="background:#ff8f37; color:#000; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">⏭️ SIRADAKİ İLGİLİ VİDEO</span>' +
+        '<span style="background:#ff8f37; color:#000; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">⏭️ SIRADAKİ İLK ÖNERİ</span>' +
         '<span style="font-size:11px; color:#5eead4; font-weight:600;">' +
         safeBadge +
         '</span>' +
@@ -6111,11 +6404,13 @@ try {
         '</div>' +
         '<div style="font-size:12px; color:#94a3b8; margin-top:2px;">' +
         safeChannel +
-        (isReadyLocal
+        (autoPlayOn
           ? ' • <span id="yaktube-upnext-countdown-txt" style="color:#ff8f37; font-weight:700;">' +
             secondsLeft +
-            ' saniye içinde başlıyor...</span>'
-          : '') +
+            ' saniye içinde ' +
+            (isReadyLocal ? 'başlıyor...' : 'otomatik aktarılıp başlıyor...') +
+            '</span>'
+          : ' • <span id="yaktube-upnext-countdown-txt" style="color:#94a3b8;">Otomatik oynatma kapalı</span>') +
         '</div>' +
         '</div>' +
         '</div>' +
@@ -6126,7 +6421,7 @@ try {
             '" style="background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; text-decoration:none; padding:10px 18px; border-radius:10px; font-weight:800; font-size:13px; display:inline-flex; align-items:center; gap:6px;">▶️ Hemen İzle</a>'
           : '<button type="button" id="yaktube-upnext-import-btn" style="background:linear-gradient(135deg, #ff8f37 0%, #ea580c 100%); color:#000; border:none; padding:10px 18px; border-radius:10px; font-weight:800; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">📥 İndir ve Hemen İzle</button>') +
         '<button type="button" id="yaktube-upnext-cancel-btn" style="background:#334155; color:#e2e8f0; border:1px solid rgba(255,255,255,0.15); padding:10px 14px; border-radius:10px; font-weight:600; font-size:12px; cursor:pointer;">' +
-        (isReadyLocal ? '✕ Otomatik Geçişi Durdur' : '✕ Kapat') +
+        (autoPlayOn ? '✕ Otomatik Geçişi Durdur' : '✕ Kapat') +
         '</button>' +
         '</div>';
 
@@ -6160,13 +6455,13 @@ try {
       if (importBtn) {
         importBtn.addEventListener('click', function () {
           clearUpNextOverlay();
-          handleImport(nextItem.url, importBtn, nextItem.title);
+          playFirstSmartRecommendation('upnext-banner-click');
         });
       }
 
-      if (isReadyLocal) {
+      if (autoPlayOn) {
         announce(
-          'Video sona erdi. Sıradaki ilgili video 6 saniye içinde başlayacak: ' +
+          'Video sona erdi. Sıradaki ilk önerilen video 6 saniye içinde başlayacak: ' +
             nextItem.title +
             '. Durdurmak için Otomatik Geçişi Durdur düğmesine basabilirsiniz.'
         );
@@ -6174,16 +6469,17 @@ try {
           secondsLeft--;
           var cdTxt = document.getElementById('yaktube-upnext-countdown-txt');
           if (cdTxt && secondsLeft > 0) {
-            cdTxt.textContent = secondsLeft + ' saniye içinde başlıyor...';
+            cdTxt.textContent =
+              secondsLeft + ' saniye içinde ' + (isReadyLocal ? 'başlıyor...' : 'otomatik aktarılıp başlıyor...');
           }
           if (secondsLeft <= 0) {
             clearInterval(upNextCountdownTimer);
             upNextCountdownTimer = null;
-            window.location.href = nextItem.localVideo.url;
+            playFirstSmartRecommendation('autoplay-ended');
           }
         }, 1000);
       } else {
-        announce('Video sona erdi. Sıradaki ilgili öneri: ' + nextItem.title);
+        announce('Video sona erdi. Sıradaki ilk öneri: ' + nextItem.title);
       }
     }
 
@@ -6863,6 +7159,11 @@ try {
           videoState.pausedByUser = true;
           video.pause();
         });
+        navigator.mediaSession.setActionHandler('nexttrack', function () {
+          if (typeof window.__yaktube_play_next_smart__ === 'function') {
+            window.__yaktube_play_next_smart__('media-session-next');
+          }
+        });
       } catch (e) {}
     }
 
@@ -7028,6 +7329,61 @@ try {
 
 // PeerTube Plugin Client Hook Registration
 export async function register({ registerHook, peertubeHelpers } = {}) {
+  if (typeof registerHook === 'function') {
+    try {
+      registerHook({
+        target: 'filter:internal.video-watch.player.load-options.result',
+        handler: function (result) {
+          if (!result || typeof result !== 'object') return result;
+          var origNextVideo = result.nextVideo;
+          result.nextVideo = function () {
+            var orig = typeof origNextVideo === 'function' ? origNextVideo() : {};
+            if (typeof window !== 'undefined' && typeof window.__yaktube_is_playlist_watch === 'function') {
+              if (window.__yaktube_is_playlist_watch()) return orig;
+            }
+            var firstRec =
+              typeof window !== 'undefined' && typeof window.__yaktube_get_first_smart_rec === 'function'
+                ? window.__yaktube_get_first_smart_rec()
+                : null;
+            return Object.assign({}, orig, {
+              enabled: Boolean(firstRec) || Boolean(orig && orig.enabled),
+              displayControlBarButton: true,
+              getClipTitle: function () {
+                var rec =
+                  typeof window !== 'undefined' && typeof window.__yaktube_get_first_smart_rec === 'function'
+                    ? window.__yaktube_get_first_smart_rec()
+                    : null;
+                if (rec && rec.title) return rec.title;
+                return orig && typeof orig.getClipTitle === 'function' ? orig.getClipTitle() : 'Sonraki Önerilen Video';
+              },
+              handler: function () {
+                if (typeof window !== 'undefined' && typeof window.__yaktube_play_next_smart__ === 'function') {
+                  window.__yaktube_play_next_smart__('peertube-player-hook');
+                  return;
+                }
+                if (orig && typeof orig.handler === 'function') orig.handler();
+              }
+            });
+          };
+
+          if (result.upnext && typeof result.upnext === 'object') {
+            var origUpnext = result.upnext;
+            result.upnext = Object.assign({}, origUpnext, {
+              isEnabled: function () {
+                if (typeof window !== 'undefined' && typeof window.__yaktube_is_playlist_watch === 'function') {
+                  if (window.__yaktube_is_playlist_watch()) {
+                    return origUpnext && typeof origUpnext.isEnabled === 'function' ? origUpnext.isEnabled() : false;
+                  }
+                }
+                return false;
+              }
+            });
+          }
+          return result;
+        }
+      });
+    } catch (e) {}
+  }
   return true;
 }
 
