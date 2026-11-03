@@ -196,6 +196,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
   let maxDiskUsagePercent = 85;
   let yaknetSsoEnabled = true;
   let smartPrefetchMode = 'auto-when-no-local';
+  let federatedRecommendationsMode = 'smart-relevant';
   let customChannelId = '';
   let customYtDlpPath = '';
   let safeSearchEnabled = true;
@@ -277,6 +278,32 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         'İzleyici bir videoyu en az 25 saniye izlediğinde, sunucuda o konuyla ilgili yerel video yoksa en alakalı 1. YouTube önerisini arka planda sessizce hazırlar. Böylece video bittiğinde alakasız videolar yerine doğrudan ilgili içerik kesintisiz oynatılır. Sunucu kaynaklarını korumak isteyen yöneticiler bu ayarı kapatabilir.',
       private: false,
       default: 'auto-when-no-local'
+    });
+
+    registerSetting({
+      name: 'federated-recommendations-mode',
+      label: 'Fediverse (Diğer PeerTube Sunucuları) Öneri Görünümü',
+      type: 'select',
+      options: [
+        {
+          label:
+            'Akıllı Alaka Süzgeci (Önerilen — Konuyla ve geçmişle alakalı Fediverse videolarını 🌐 rozetiyle önerilere dahil et, diğerlerini açılır buton altında tut)',
+          value: 'smart-relevant'
+        },
+        {
+          label:
+            'Tam Açık (Akıllı önerilerin altında PeerTube standart Fediverse öneri listesini de her zaman açık bırak)',
+          value: 'show-all'
+        },
+        {
+          label: 'Kapalı (Önerilerde yalnızca bu sunucudaki yerel videoları ve YouTube sonuçlarını göster)',
+          value: 'disabled'
+        }
+      ],
+      description:
+        'İzleme sayfasındaki önerilerde Fediverse (diğer PeerTube sunucularından gelen federe videolar) içeriklerinin nasıl sunulacağını belirler. Varsayılan "Akıllı Alaka Süzgeci" modu Fediverse videolarını engellemez; izlenen videoyla, dille veya kullanıcı geçmişiyle alakalı olan Fediverse videolarını "🌐 Fediverse\'de İzle" rozetiyle doğrudan önerilere dahil eder, alakasız/yabancı yayınları ise isteğe bağlı "🌐 Fediverse Ağındaki Diğer Videoları Göster" çekmecesi altında toplar.',
+      private: false,
+      default: 'smart-relevant'
     });
 
     registerSetting({
@@ -634,6 +661,15 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         smartPrefetchMode = String(pfVal).trim();
       } else {
         smartPrefetchMode = 'auto-when-no-local';
+      }
+    } catch (e) {}
+
+    try {
+      const fedVal = await settingsManager.getSetting('federated-recommendations-mode');
+      if (fedVal && ['smart-relevant', 'show-all', 'disabled'].includes(String(fedVal).trim())) {
+        federatedRecommendationsMode = String(fedVal).trim();
+      } else {
+        federatedRecommendationsMode = 'smart-relevant';
       }
     } catch (e) {}
 
@@ -1079,6 +1115,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       ok: true,
       yaknetSsoEnabled,
       smartPrefetchMode,
+      federatedRecommendationsMode,
       guestImportLimit,
       maxDiskUsagePercent,
       safeSearchEnabled,
@@ -1515,6 +1552,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
           durationFormatted: formatDurationLabel(lv.duration || 0),
           isLive: false,
           isDownloaded: true,
+          isFederated: false,
           reasonBadge: reasonBadge ? `✅ ${reasonBadge.replace(/^[🔥🎯📂]\s*/, '')}` : "✅ YakTube'da İzle",
           relevanceScore: finalScore,
           url: lv.importUrl || `/videos/watch/${lv.uuid}`,
@@ -1529,6 +1567,118 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       }
     } catch (e) {
       if (logger) logger.warn('[YakTube SmartRec] Local DB query warning: ' + e.message);
+    }
+
+    // 1.5. Score Relevant Fediverse (Remote PeerTube) Videos when federatedRecommendationsMode !== 'disabled'
+    if (federatedRecommendationsMode !== 'disabled') {
+      try {
+        const searchPatterns = Array.from(
+          new Set(
+            [...(artistNorm && artistNorm.length >= 3 ? [artistNorm] : []), ...currentKeywords, ...historyKeywords]
+              .filter(k => k && k.length >= 3)
+              .slice(0, 8)
+              .map(k => `%${k}%`)
+          )
+        );
+
+        if (searchPatterns.length > 0) {
+          const fedRows = await dbQuery(
+            `SELECT DISTINCT ON (v.id)
+               v.id, v.uuid, v.name, v.category, v.language, v.duration, v.views, v."isLive", v.nsfw,
+               t.filename AS "thumbFilename"
+             FROM "video" v
+             LEFT JOIN "thumbnail" t ON t."videoId" = v.id
+             WHERE v.remote = true
+               AND v.state = 1
+               AND v.privacy = 1
+               AND v.nsfw = false
+               AND (v.name ILIKE ANY($1) OR v.language = 'tr')
+             ORDER BY v.id DESC, t.type ASC
+             LIMIT 80`,
+            [searchPatterns]
+          );
+
+          for (const fv of fedRows) {
+            if (!fv || !fv.name) continue;
+            if (resolvedUuid && fv.uuid === resolvedUuid) continue;
+            if (safeSearchEnabled && (fv.nsfw || isContentBlocked(fv.name, blockedKeywordsList))) continue;
+
+            const normFv = normalizeTitleForMatch(fv.name);
+            if (!normFv || normFv === normCurrentTitle) continue;
+
+            let fedScore = 0;
+            let fedBadge = '';
+
+            if (artistNorm && artistNorm.length >= 3 && normFv.includes(artistNorm)) {
+              fedScore += 65;
+              fedBadge = '🌐 Fediverse • Aynı Sanatçı';
+            }
+
+            const fvKeywords = extractRecommendationKeywords(fv.name);
+            let kwOverlap = 0;
+            for (const kw of currentKeywords) {
+              if (fvKeywords.includes(kw) || (kw.length >= 4 && normFv.includes(kw))) {
+                kwOverlap++;
+              }
+            }
+            if (kwOverlap > 0) {
+              fedScore += kwOverlap * 30;
+              if (!fedBadge) fedBadge = '🌐 Fediverse • Benzer İçerik';
+            }
+
+            let histOverlap = 0;
+            for (const hkw of historyKeywords) {
+              if (fvKeywords.includes(hkw) || (hkw.length >= 4 && normFv.includes(hkw))) {
+                histOverlap++;
+              }
+            }
+            if (histOverlap > 0) {
+              fedScore += Math.min(48, histOverlap * 24);
+              if (!fedBadge) fedBadge = '🌐 Fediverse • Geçmişinize Göre';
+            }
+
+            if (
+              currentCategory &&
+              fv.category &&
+              Number(fv.category) === currentCategory &&
+              String(fv.language || '').toLowerCase() === 'tr'
+            ) {
+              fedScore += 22;
+              if (!fedBadge) fedBadge = '🌐 Fediverse • Aynı Kategori';
+            }
+
+            // Require strong relevance (score >= 28) so random foreign webcams never slip in
+            if (fedScore < 28) continue;
+
+            const thumbUrl = fv.thumbFilename
+              ? `/lazy-static/thumbnails/${fv.thumbFilename}`
+              : '/client/assets/images/default-thumbnail.jpg';
+
+            scoredLocalItems.push({
+              id: `fed-${fv.uuid}`,
+              title: fv.name,
+              channel: 'Fediverse Ağı',
+              duration: fv.duration || 0,
+              durationFormatted: fv.isLive ? 'CANLI' : formatDurationLabel(fv.duration || 0),
+              isLive: Boolean(fv.isLive),
+              isDownloaded: true,
+              isFederated: true,
+              reasonBadge: fedBadge || "🌐 Fediverse'de İzle",
+              relevanceScore: fedScore + 20,
+              url: `/videos/watch/${fv.uuid}`,
+              thumbnail: thumbUrl,
+              localVideo: {
+                id: fv.id,
+                uuid: fv.uuid,
+                name: fv.name,
+                url: `/videos/watch/${fv.uuid}`
+              }
+            });
+          }
+        }
+      } catch (e) {
+        if (logger) logger.warn('[YakTube SmartRec] Federated DB query warning: ' + e.message);
+      }
     }
 
     // 2. Query YouTube On-Demand for Current Video Topic + User History in Parallel
@@ -1655,6 +1805,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       historyQuery: historyQuery || null,
       hasLocalMatch: hasDirectLocalMatch,
       smartPrefetchMode,
+      federatedRecommendationsMode,
       topPrefetchCandidate: topPrefetchCandidate
         ? {
             id: topPrefetchCandidate.id,

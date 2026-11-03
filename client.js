@@ -3615,6 +3615,7 @@ try {
     var cachedGuestImportLimit = null;
     var cachedCategories = null;
     var cachedSmartPrefetchMode = 'auto-when-no-local';
+    var cachedFederatedRecommendationsMode = 'smart-relevant';
 
     function fetchGuestImportLimit() {
       if (cachedGuestImportLimit !== null && cachedCategories !== null) {
@@ -3630,6 +3631,9 @@ try {
           }
           if (d && typeof d.smartPrefetchMode === 'string') {
             cachedSmartPrefetchMode = d.smartPrefetchMode;
+          }
+          if (d && typeof d.federatedRecommendationsMode === 'string') {
+            cachedFederatedRecommendationsMode = d.federatedRecommendationsMode;
           }
           if (d && Array.isArray(d.categories) && d.categories.length > 0) {
             cachedCategories = d.categories;
@@ -5690,6 +5694,8 @@ try {
       return interests.slice(0, 8);
     }
 
+    var showNativeFediverseDrawer = false;
+
     function suppressUnrelatedNativeRecommendations() {
       try {
         // Prevent PeerTube's native player from auto-redirecting to unrelated foreign/federated videos on video end
@@ -5697,14 +5703,23 @@ try {
         sessionStorage.setItem('auto-play-video', 'false');
       } catch (e) {}
 
+      var shouldShowNativeList =
+        cachedFederatedRecommendationsMode === 'show-all' ||
+        (cachedFederatedRecommendationsMode === 'smart-relevant' && showNativeFediverseDrawer);
+
       var recContainers = document.querySelectorAll('my-recommended-videos, .other-videos, .video-watch-next');
       recContainers.forEach(function (rec) {
         Array.from(rec.children).forEach(function (child) {
           if (child.id === 'yaktube-hybrid-related-container' || child.id === 'yaktube-upnext-overlay') {
             return;
           }
-          child.style.setProperty('display', 'none', 'important');
-          child.setAttribute('aria-hidden', 'true');
+          if (shouldShowNativeList) {
+            child.style.removeProperty('display');
+            child.removeAttribute('aria-hidden');
+          } else {
+            child.style.setProperty('display', 'none', 'important');
+            child.setAttribute('aria-hidden', 'true');
+          }
         });
       });
     }
@@ -5725,14 +5740,19 @@ try {
       var cardsHtml = '';
       displayed.forEach(function (item) {
         var isLocal = !!item.isDownloaded;
-        var badgeLabel = item.reasonBadge || (isLocal ? '✅ ' + getInstanceName() + "'da İzle" : '🔥 Benzer İçerik');
+        var isFed = !!item.isFederated;
+        var badgeLabel =
+          item.reasonBadge ||
+          (isFed ? "🌐 Fediverse'de İzle" : isLocal ? '✅ ' + getInstanceName() + "'da İzle" : '🔥 Benzer İçerik');
         var isHistoryMatch = badgeLabel.indexOf('Geçmişinize Göre') !== -1;
 
-        var badgeStyle = isLocal
-          ? 'background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff;'
-          : isHistoryMatch
-            ? 'background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff;'
-            : 'background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); color: #fff;';
+        var badgeStyle = isFed
+          ? 'background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #fff;'
+          : isLocal
+            ? 'background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #fff;'
+            : isHistoryMatch
+              ? 'background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #fff;'
+              : 'background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%); color: #fff;';
 
         var statusBadge =
           '<span class="yaktube-badge" style="' +
@@ -5746,11 +5766,15 @@ try {
           isLocal && item.localVideo && item.localVideo.url
             ? '<a href="' +
               escapeHtml(item.localVideo.url) +
-              '" class="yaktube-play-btn yaktube-related-play-link" style="font-size:11px; padding:6px 10px;" aria-label="' +
+              '" class="yaktube-play-btn yaktube-related-play-link" style="font-size:11px; padding:6px 10px;' +
+              (isFed ? ' background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color:#fff;' : '') +
+              '" aria-label="' +
               safeTitleAttr +
               ' videosunu ' +
-              escapeHtml(getInstanceName()) +
-              '\'dan hemen izle">▶️ Hemen İzle</a>'
+              (isFed ? 'Fediverse ağından' : escapeHtml(getInstanceName()) + "'dan") +
+              ' hemen izle">' +
+              (isFed ? "🌐 Fediverse'den İzle" : '▶️ Hemen İzle') +
+              '</a>'
             : '<button class="yaktube-import-btn yaktube-related-import" data-yt-id="' +
               escapeHtml(item.id || '') +
               '" data-url="' +
@@ -5813,6 +5837,18 @@ try {
         }
       }
 
+      var fediverseDrawerBtn = '';
+      if (cachedFederatedRecommendationsMode === 'smart-relevant') {
+        fediverseDrawerBtn =
+          '<button id="yaktube-toggle-native-fediverse-btn" class="yaktube-shortcuts-btn" style="width:100%; margin-top:10px; padding:9px 12px; justify-content:center; font-size:12px; font-weight:600; background:rgba(14,165,233,0.1); border:1px solid rgba(14,165,233,0.35); color:#7dd3fc;" aria-expanded="' +
+          (showNativeFediverseDrawer ? 'true' : 'false') +
+          '" aria-label="Fediverse ağındaki diğer videoları göster veya gizle">' +
+          (showNativeFediverseDrawer
+            ? '🔼 Fediverse Ağındaki Diğer Videoları Gizle'
+            : '🌐 Fediverse Ağındaki Diğer Videoları Göster (İsteğe Bağlı)') +
+          '</button>';
+      }
+
       var headerCountText = count > 12 && !relatedShowAll ? displayed.length + ' / ' + count : count;
       var prefetchStatusHtml = '';
       if (smartPrefetchState.videoKey === currentActiveVideoKey) {
@@ -5845,7 +5881,8 @@ try {
         '<div class="yaktube-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:12px;">' +
         cardsHtml +
         '</div>' +
-        loadMoreBtn;
+        loadMoreBtn +
+        fediverseDrawerBtn;
 
       var toggleBtn = document.getElementById('yaktube-related-toggle-more');
       if (toggleBtn) {
@@ -5854,6 +5891,20 @@ try {
           renderRelatedCards(container, cachedRelatedResults, cachedRelatedQuery);
           announce(
             relatedShowAll ? 'Tüm ' + cachedRelatedResults.length + ' önerilen video açıldı.' : 'Öneriler daraltıldı.'
+          );
+        });
+      }
+
+      var fedDrawerBtn = document.getElementById('yaktube-toggle-native-fediverse-btn');
+      if (fedDrawerBtn) {
+        fedDrawerBtn.addEventListener('click', function () {
+          showNativeFediverseDrawer = !showNativeFediverseDrawer;
+          suppressUnrelatedNativeRecommendations();
+          renderRelatedCards(container, cachedRelatedResults, cachedRelatedQuery);
+          announce(
+            showNativeFediverseDrawer
+              ? 'Fediverse ağındaki diğer videolar gösteriliyor.'
+              : 'Fediverse ağındaki diğer videolar gizlendi.'
           );
         });
       }
@@ -6268,6 +6319,9 @@ try {
           if (data && typeof data.smartPrefetchMode === 'string') {
             cachedSmartPrefetchMode = data.smartPrefetchMode;
           }
+          if (data && typeof data.federatedRecommendationsMode === 'string') {
+            cachedFederatedRecommendationsMode = data.federatedRecommendationsMode;
+          }
           smartHasLocalMatch = Boolean(data && data.hasLocalMatch);
           smartPrefetchCandidate = (data && data.topPrefetchCandidate) || null;
           if (smartPrefetchState.videoKey !== thisVideoKey) {
@@ -6296,6 +6350,7 @@ try {
           cachedRelatedQuery = (data && data.query) || searchQuery;
           currentActiveVideoKey = thisVideoKey;
           relatedShowAll = false;
+          showNativeFediverseDrawer = false;
 
           renderRelatedCards(container, uniqueResults, cachedRelatedQuery);
 
