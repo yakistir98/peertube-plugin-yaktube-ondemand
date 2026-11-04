@@ -4361,12 +4361,12 @@ try {
                     );
                   }
 
-                  if (sData.isPublished || (sData.hasFiles && !sData.isImporting && !sData.isFailed && attempts >= 4)) {
+                  if (sData.isPublished) {
                     clearInterval(pollInterval);
                     showModal('🎉 Video Hazır!', 'Video kütüphanenize eklendi. Oynatıcı açılıyor...');
                     setTimeout(function () {
                       window.location.href = '/videos/watch/' + (sData.uuid || videoUuid);
-                    }, 500);
+                    }, 400);
                   } else if (sData.isFailed) {
                     clearInterval(pollInterval);
                     btn.disabled = false;
@@ -6328,10 +6328,7 @@ try {
             }
             fetchPluginJson('/status/' + videoId)
               .then(function (sData) {
-                if (
-                  sData &&
-                  (sData.isPublished || (sData.hasFiles && !sData.isImporting && !sData.isFailed && attempts >= 4))
-                ) {
+                if (sData && sData.isPublished) {
                   clearInterval(smartPrefetchState.pollTimer);
                   smartPrefetchState.pollTimer = null;
                   var watchUrl = '/videos/watch/' + (sData.uuid || videoUuid);
