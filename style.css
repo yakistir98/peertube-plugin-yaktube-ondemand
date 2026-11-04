@@ -1938,3 +1938,18 @@ my-date-toggle .date-toggle:focus-visible {
   border-color: #ff8f37 !important;
   box-shadow: 0 0 12px rgba(255, 143, 55, 0.6) !important;
 }
+
+/* 4. Fediverse Çift Otomatik Oynatma Düğmesi Çakışmasını Engelleme (Tek Birleşik YakTube Oto-Oynat) */
+my-recommended-videos .other-videos-header,
+.other-videos .other-videos-header,
+my-recommended-videos my-input-switch,
+.other-videos my-input-switch,
+my-recommended-videos .autoplay-line,
+.other-videos .autoplay-line,
+#auto-play-video,
+label[for='auto-play-video'],
+.vjs-upnext-content {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

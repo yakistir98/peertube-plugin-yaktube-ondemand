@@ -1386,6 +1386,61 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     return (mins < 10 ? '0' + mins : String(mins)) + ':' + (secs < 10 ? '0' + secs : String(secs));
   }
 
+  const GENERIC_CHANNEL_AND_TAG_NAMES = new Set([
+    'yaktube',
+    'root',
+    'admin',
+    'youtube',
+    'varsayilan',
+    'varsayılan',
+    'muzik kanali',
+    'müzik kanalı',
+    'muzik_kanali',
+    'genel medya',
+    'yaktube genel medya',
+    'yaktube muzik',
+    'yaktube müzik',
+    'video',
+    'shorts',
+    'viral',
+    'yeni',
+    'turkce',
+    'türkçe',
+    'muzik',
+    'müzik',
+    'musik',
+    'muziek',
+    'music',
+    'film',
+    'dizi',
+    'haber',
+    'komik',
+    'eglence',
+    'eğlence',
+    'bildirimler',
+    'notifications'
+  ]);
+
+  function normalizeCoreVideoTitle(text) {
+    if (!text) return '';
+    return normalizeTitleForMatch(
+      String(text)
+        .replace(/[\(\[].*?[\)\]]/g, ' ')
+        .replace(
+          /\b(official\s*music\s*video|official\s*video|official\s*audio|video\s*klip|klip|hd|4k|1080p|lyric\s*video|lyrics|audio|şarkı\s*sözleri|sarki\s*sozleri|full\s*izle|yaktube)\b/gi,
+          ' '
+        )
+    );
+  }
+
+  function isGenericChannelOrTag(name) {
+    const norm = normalizeTitleForMatch(name);
+    if (!norm || norm.length < 3) return true;
+    if (GENERIC_CHANNEL_AND_TAG_NAMES.has(norm)) return true;
+    if (/^yaktube\b/i.test(norm) || /\bkanali$/i.test(norm) || /\bkanalı$/i.test(norm)) return true;
+    return false;
+  }
+
   router.get('/smart-recommendations', async (req, res) => {
     await loadPluginSettings();
     if (isCrawlerBotRequest(req)) {
@@ -1401,9 +1456,15 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     const rawUuid = (req.query.uuid || '').trim();
     const rawTitle = (req.query.title || '').trim();
     const rawChannel = (req.query.channel || '').trim();
+    const rawYtChannel = (req.query.ytChannel || '').trim();
     const rawHistory = (req.query.history || '').trim();
+    const rawWatched = (req.query.watched || '').trim();
 
-    if (!rawTitle && !rawUuid) {
+    const cleanRawTitle = /^(bildirimler|notifications|yaktube|peertube|yükleniyor|loading)$/i.test(rawTitle)
+      ? ''
+      : rawTitle;
+
+    if (!cleanRawTitle && !rawUuid) {
       return res.json({
         ok: true,
         results: [],
@@ -1415,6 +1476,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
     const resolvedUuid = rawUuid ? shortToUuid(rawUuid) : '';
     let currentVideoRow = null;
+    let currentVideoTags = [];
 
     if (resolvedUuid) {
       try {
@@ -1428,12 +1490,33 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         );
         if (currentRows.length > 0) {
           currentVideoRow = currentRows[0];
+          const tagRows = await dbQuery(
+            `SELECT t.name
+             FROM "videoTag" vt
+             INNER JOIN "tag" t ON t.id = vt."tagId"
+             WHERE vt."videoId" = $1
+             ORDER BY vt.id ASC
+             LIMIT 8`,
+            [currentVideoRow.id]
+          );
+          currentVideoTags = tagRows.map(r => String(r.name || '').trim()).filter(Boolean);
         }
       } catch (e) {}
     }
 
-    const effectiveTitle = rawTitle || (currentVideoRow && currentVideoRow.name) || '';
+    const effectiveTitle = cleanRawTitle || (currentVideoRow && currentVideoRow.name) || '';
+    if (!effectiveTitle) {
+      return res.json({
+        ok: true,
+        results: [],
+        hasLocalMatch: false,
+        smartPrefetchMode,
+        guestImportLimit
+      });
+    }
+
     const normCurrentTitle = normalizeTitleForMatch(effectiveTitle);
+    const coreCurrentTitle = normalizeCoreVideoTitle(effectiveTitle);
     const currentCategory = currentVideoRow && currentVideoRow.category ? Number(currentVideoRow.category) : null;
 
     let currentYtId = null;
@@ -1445,22 +1528,116 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       if (m) currentYtId = m[1];
     }
 
-    // Extract artist/prefix before '-' if present (e.g. "Seda Sayan & Tekir - Gör Bak")
+    // Build strict exclusion sets for the current video AND recently watched videos (prevents A <-> B autoplay loops)
+    const excludedUuids = new Set();
+    const excludedYtIds = new Set();
+    const excludedNormTitles = new Set();
+    const excludedCoreTitles = new Set();
+
+    if (resolvedUuid) excludedUuids.add(resolvedUuid.toLowerCase());
+    if (rawUuid) excludedUuids.add(rawUuid.toLowerCase());
+    if (currentYtId) excludedYtIds.add(currentYtId);
+    if (normCurrentTitle) excludedNormTitles.add(normCurrentTitle);
+    if (coreCurrentTitle && coreCurrentTitle.length >= 4) excludedCoreTitles.add(coreCurrentTitle);
+
+    if (rawWatched) {
+      const watchedParts = rawWatched
+        .split('|')
+        .map(s => String(s || '').trim())
+        .filter(Boolean);
+      for (const wp of watchedParts) {
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(wp)) {
+          excludedUuids.add(wp.toLowerCase());
+        } else if (/^[a-zA-Z0-9_-]{22}$/.test(wp)) {
+          const fullU = shortToUuid(wp);
+          excludedUuids.add(wp.toLowerCase());
+          if (fullU) excludedUuids.add(fullU.toLowerCase());
+        } else if (/^[a-zA-Z0-9_-]{11}$/.test(wp) && !/\s/.test(wp)) {
+          excludedYtIds.add(wp);
+        } else {
+          const nTitle = normalizeTitleForMatch(wp);
+          const cTitle = normalizeCoreVideoTitle(wp);
+          if (nTitle && nTitle.length >= 4) excludedNormTitles.add(nTitle);
+          if (cTitle && cTitle.length >= 4) excludedCoreTitles.add(cTitle);
+        }
+      }
+    }
+
+    function isCurrentVideoMatch(uuid, ytId, title) {
+      if (uuid && (uuid.toLowerCase() === resolvedUuid.toLowerCase() || uuid.toLowerCase() === rawUuid.toLowerCase())) {
+        return true;
+      }
+      if (currentYtId && ytId && ytId === currentYtId) return true;
+      const nT = normalizeTitleForMatch(title);
+      const cT = normalizeCoreVideoTitle(title);
+      if (nT && nT === normCurrentTitle) return true;
+      if (cT && coreCurrentTitle && cT.length >= 5 && cT === coreCurrentTitle) return true;
+      return false;
+    }
+
+    function isAlreadyWatchedVideo(uuid, ytId, title) {
+      if (uuid && excludedUuids.has(String(uuid).toLowerCase())) return true;
+      if (ytId && excludedYtIds.has(String(ytId))) return true;
+      const nT = normalizeTitleForMatch(title);
+      const cT = normalizeCoreVideoTitle(title);
+      if (nT && excludedNormTitles.has(nT)) return true;
+      if (cT && cT.length >= 5 && excludedCoreTitles.has(cT)) return true;
+      return false;
+    }
+
+    // Identify Creator / YouTube Channel / Artist from multiple signals
     let artistPart = '';
     const dashParts = effectiveTitle.split(/\s+[\-\u2010-\u2015]\s+/);
-    if (dashParts.length >= 2 && dashParts[0].trim().length >= 3) {
+    const pipeParts = effectiveTitle.split(/\s+\|\s+/);
+    const handleMatch = effectiveTitle.match(/@([a-zA-Z0-9_.\u00C0-\u017F]{3,30})/);
+
+    if (dashParts.length >= 2 && dashParts[0].trim().length >= 3 && dashParts[0].trim().length <= 42) {
       artistPart = dashParts[0]
         .replace(/[\(\[].*?[\)\]]/g, '')
         .replace(/YakTube/gi, '')
         .trim();
     } else if (
-      rawChannel &&
-      !/^(yaktube|root|admin|youtube|varsayılan|müzik kanalı|muzik_kanali)$/i.test(rawChannel.trim())
+      pipeParts.length >= 2 &&
+      pipeParts[pipeParts.length - 1].trim().length >= 3 &&
+      pipeParts[pipeParts.length - 1].trim().length <= 40
     ) {
-      artistPart = rawChannel.trim();
+      artistPart = pipeParts[pipeParts.length - 1]
+        .replace(/[\(\[].*?[\)\]]/g, '')
+        .replace(/^@/, '')
+        .trim();
+    } else if (handleMatch && handleMatch[1]) {
+      artistPart = handleMatch[1].trim();
     }
+
+    let channelCreatorName = '';
+    if (rawYtChannel && !isGenericChannelOrTag(rawYtChannel)) {
+      channelCreatorName = rawYtChannel.trim();
+    } else {
+      const firstMeaningfulTag = currentVideoTags.find(t => !isGenericChannelOrTag(t));
+      if (firstMeaningfulTag) {
+        channelCreatorName = firstMeaningfulTag;
+      } else if (rawChannel && !isGenericChannelOrTag(rawChannel)) {
+        channelCreatorName = rawChannel.trim();
+      }
+    }
+
+    if (!artistPart && channelCreatorName) {
+      artistPart = channelCreatorName;
+    }
+
     const artistNorm = normalizeTitleForMatch(artistPart);
-    const currentKeywords = extractRecommendationKeywords(effectiveTitle);
+    const channelCreatorNorm = normalizeTitleForMatch(channelCreatorName);
+    const currentTagNorms = currentVideoTags
+      .filter(t => !isGenericChannelOrTag(t))
+      .map(t => normalizeTitleForMatch(t))
+      .filter(t => t.length >= 3);
+
+    const currentKeywords = Array.from(
+      new Set([
+        ...extractRecommendationKeywords(effectiveTitle),
+        ...currentVideoTags.flatMap(t => extractRecommendationKeywords(t))
+      ])
+    );
 
     // Build clean primary search query for YouTube
     const cleanTopic = effectiveTitle
@@ -1471,20 +1648,57 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       .trim();
 
     const topicWords = cleanTopic.split(/\s+/).filter(w => w.length >= 2);
-    const primaryQuery = topicWords.slice(0, 5).join(' ') || cleanTopic || effectiveTitle;
+    let primaryQuery = topicWords.slice(0, 5).join(' ') || cleanTopic || effectiveTitle;
+    if (
+      channelCreatorName &&
+      topicWords.length <= 3 &&
+      !normalizeTitleForMatch(primaryQuery).includes(channelCreatorNorm)
+    ) {
+      primaryQuery = `${primaryQuery} ${channelCreatorName}`.trim();
+    }
 
-    // Parse user watch & search history terms
+    // Build dedicated Creator / Same-Channel query so other videos from the same YouTube channel are fetched
+    let creatorQuery = '';
+    const candidateCreators = [channelCreatorName, artistPart].filter(c => c && !isGenericChannelOrTag(c));
+    for (const cand of candidateCreators) {
+      const normCand = normalizeTitleForMatch(cand);
+      if (normCand && normCand.length >= 3 && normCand !== normalizeTitleForMatch(primaryQuery)) {
+        creatorQuery = cand;
+        break;
+      }
+    }
+    if (!creatorQuery && candidateCreators.length > 0) {
+      creatorQuery = candidateCreators[0];
+    }
+
+    // Parse user watch & search history terms (filtering out UI labels and placeholders)
     let historyTerms = [];
     if (rawHistory) {
       try {
         const parsed = rawHistory.startsWith('[') ? JSON.parse(rawHistory) : rawHistory.split('|');
         if (Array.isArray(parsed)) {
-          const defaultIgnore = new Set(['tarkan', 'barış manço', 'yapay zeka', 'canlı haber']);
+          const defaultIgnore = new Set([
+            'tarkan',
+            'barış manço',
+            'baris manco',
+            'yapay zeka',
+            'canlı haber',
+            'canli haber',
+            'bildirimler',
+            'notifications',
+            'yaktube',
+            'peertube'
+          ]);
           const cleaned = parsed
             .map(t => String(t || '').trim())
-            .filter(t => t.length >= 3 && (!safeSearchEnabled || !isContentBlocked(t, blockedKeywordsList)));
+            .filter(
+              t =>
+                t.length >= 3 &&
+                !/^(bildirimler|notifications|yaktube|peertube|anasayfa)$/i.test(t) &&
+                (!safeSearchEnabled || !isContentBlocked(t, blockedKeywordsList))
+            );
           const nonDefaults = cleaned.filter(t => !defaultIgnore.has(t.toLocaleLowerCase('tr')));
-          historyTerms = (nonDefaults.length > 0 ? nonDefaults : cleaned).slice(0, 8);
+          historyTerms = (nonDefaults.length > 0 ? nonDefaults : cleaned).slice(0, 10);
         }
       } catch (e) {}
     }
@@ -1493,30 +1707,37 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       new Set(historyTerms.flatMap(t => extractRecommendationKeywords(t)).filter(w => w.length >= 3))
     );
 
-    // Pick a distinct secondary query from user history that isn't identical to primaryQuery
-    let historyQuery = '';
+    // Pick up to 2 distinct secondary queries from user watch/search history
+    const historyQueries = [];
     const normPrimary = normalizeTitleForMatch(primaryQuery);
+    const normCreator = normalizeTitleForMatch(creatorQuery);
     for (const hTerm of historyTerms) {
       const normH = normalizeTitleForMatch(hTerm);
       if (
         normH &&
         normH.length >= 3 &&
         normH !== normPrimary &&
+        normH !== normCreator &&
         !normPrimary.includes(normH) &&
-        !normH.includes(normPrimary)
+        !normH.includes(normPrimary) &&
+        !historyQueries.some(existing => normalizeTitleForMatch(existing) === normH)
       ) {
-        historyQuery = hTerm
+        const cleanedHTerm = hTerm
           .replace(/[\(\[].*?[\)\]]/g, '')
           .split(/\s+/)
           .slice(0, 4)
           .join(' ')
           .trim();
-        if (historyQuery.length >= 3) break;
+        if (cleanedHTerm.length >= 3) {
+          historyQueries.push(cleanedHTerm);
+          if (historyQueries.length >= 2) break;
+        }
       }
     }
 
-    // 1. Score Local YakTube Videos from PostgreSQL
+    // 1. Score Local YakTube Videos from PostgreSQL (including their stored YouTube channel/tags)
     const scoredLocalItems = [];
+    const watchedFallbackItems = [];
     let hasDirectLocalMatch = false;
 
     try {
@@ -1524,7 +1745,15 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         `SELECT DISTINCT ON (v.id)
            v.id, v.uuid, v.name, v.category, v.duration, v.views, v."createdAt",
            t.filename AS "thumbFilename",
-           vi."targetUrl" AS "importUrl"
+           vi."targetUrl" AS "importUrl",
+           (
+             SELECT tg.name
+             FROM "videoTag" vt2
+             INNER JOIN "tag" tg ON tg.id = vt2."tagId"
+             WHERE vt2."videoId" = v.id
+             ORDER BY vt2.id ASC
+             LIMIT 1
+           ) AS "primaryTag"
          FROM "video" v
          LEFT JOIN "thumbnail" t ON t."videoId" = v.id
          LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
@@ -1535,12 +1764,8 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
       for (const lv of localRows) {
         if (!lv || !lv.name) continue;
-        if (resolvedUuid && lv.uuid === resolvedUuid) continue;
         if (currentVideoRow && Number(lv.id) === Number(currentVideoRow.id)) continue;
         if (safeSearchEnabled && isContentBlocked(lv.name, blockedKeywordsList)) continue;
-
-        const normLv = normalizeTitleForMatch(lv.name);
-        if (!normLv || normLv === normCurrentTitle) continue;
 
         let lvYtId = null;
         if (lv.importUrl) {
@@ -1550,15 +1775,36 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
             lv.importUrl.match(/shorts\/([^?]+)/);
           if (m) lvYtId = m[1];
         }
-        if (currentYtId && lvYtId && currentYtId === lvYtId) continue;
+
+        // Never recommend the exact video currently playing
+        if (isCurrentVideoMatch(lv.uuid, lvYtId, lv.name)) continue;
+
+        const normLv = normalizeTitleForMatch(lv.name);
+        if (!normLv) continue;
+        const lvTagNorm = normalizeTitleForMatch(lv.primaryTag || '');
+        const lvChannelDisplay =
+          lv.primaryTag && !isGenericChannelOrTag(lv.primaryTag) ? lv.primaryTag : 'YakTube Kütüphanesi';
 
         let rawScore = 0;
         let reasonBadge = '';
+        let sourceBucket = 'topic';
 
-        // Artist / channel match
-        if (artistNorm && artistNorm.length >= 3 && normLv.includes(artistNorm)) {
-          rawScore += 65;
-          reasonBadge = '🔥 Aynı Sanatçı / Kanal';
+        // Same YouTube channel / creator / artist match
+        const isSameArtist =
+          artistNorm && artistNorm.length >= 3 && (normLv.includes(artistNorm) || lvTagNorm === artistNorm);
+        const isSameChannel =
+          (channelCreatorNorm &&
+            channelCreatorNorm.length >= 3 &&
+            (normLv.includes(channelCreatorNorm) || lvTagNorm === channelCreatorNorm)) ||
+          (lvTagNorm && currentTagNorms.includes(lvTagNorm));
+
+        if (isSameChannel || isSameArtist) {
+          rawScore += 75;
+          reasonBadge =
+            lv.primaryTag && !isGenericChannelOrTag(lv.primaryTag)
+              ? `📺 Aynı Kanaldan • ${lv.primaryTag}`
+              : '📺 Aynı Kanaldan / Sanatçı';
+          sourceBucket = 'channel';
         }
 
         // Keyword overlap with current video
@@ -1577,13 +1823,20 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         // User watch/search history match
         let histOverlap = 0;
         for (const hkw of historyKeywords) {
-          if (lvKeywords.includes(hkw) || (hkw.length >= 4 && normLv.includes(hkw))) {
+          if (
+            lvKeywords.includes(hkw) ||
+            (hkw.length >= 4 && normLv.includes(hkw)) ||
+            (lvTagNorm && lvTagNorm.includes(hkw))
+          ) {
             histOverlap++;
           }
         }
         if (histOverlap > 0) {
-          rawScore += Math.min(44, histOverlap * 22);
-          if (!reasonBadge) reasonBadge = '🎯 Geçmişinize Göre';
+          rawScore += Math.min(48, histOverlap * 24);
+          if (!reasonBadge) {
+            reasonBadge = '🎯 İzleme Geçmişinize Göre';
+            sourceBucket = 'history';
+          }
         }
 
         // Same category match (only if category is known)
@@ -1595,7 +1848,8 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         // Strictly exclude completely unrelated videos (score < 20)
         if (rawScore < 20) continue;
 
-        if (rawScore >= 40) {
+        const alreadyWatched = isAlreadyWatchedVideo(lv.uuid, lvYtId, lv.name);
+        if (!alreadyWatched && rawScore >= 40) {
           hasDirectLocalMatch = true;
         }
 
@@ -1606,15 +1860,16 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
             ? `https://i.ytimg.com/vi/${lvYtId}/hqdefault.jpg`
             : '/client/assets/images/default-thumbnail.jpg';
 
-        scoredLocalItems.push({
+        const candidateObj = {
           id: lvYtId || `local-${lv.uuid}`,
           title: lv.name,
-          channel: 'YakTube Kütüphanesi',
+          channel: lvChannelDisplay,
           duration: lv.duration || 0,
           durationFormatted: formatDurationLabel(lv.duration || 0),
           isLive: false,
           isDownloaded: true,
           isFederated: false,
+          sourceType: sourceBucket,
           reasonBadge: reasonBadge ? `✅ ${reasonBadge.replace(/^[🔥🎯📂]\s*/, '')}` : "✅ YakTube'da İzle",
           relevanceScore: finalScore,
           url: lv.importUrl || `/videos/watch/${lv.uuid}`,
@@ -1625,7 +1880,17 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
             name: lv.name,
             url: `/videos/watch/${lv.uuid}`
           }
-        });
+        };
+
+        if (alreadyWatched) {
+          watchedFallbackItems.push({
+            ...candidateObj,
+            relevanceScore: Math.max(10, finalScore - 80),
+            reasonBadge: '🔄 Tekrar İzle'
+          });
+        } else {
+          scoredLocalItems.push(candidateObj);
+        }
       }
     } catch (e) {
       if (logger) logger.warn('[YakTube SmartRec] Local DB query warning: ' + e.message);
@@ -1636,7 +1901,12 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       try {
         const searchPatterns = Array.from(
           new Set(
-            [...(artistNorm && artistNorm.length >= 3 ? [artistNorm] : []), ...currentKeywords, ...historyKeywords]
+            [
+              ...(artistNorm && artistNorm.length >= 3 ? [artistNorm] : []),
+              ...(channelCreatorNorm && channelCreatorNorm.length >= 3 ? [channelCreatorNorm] : []),
+              ...currentKeywords,
+              ...historyKeywords
+            ]
               .filter(k => k && k.length >= 3)
               .slice(0, 8)
               .map(k => `%${k}%`)
@@ -1662,11 +1932,12 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
           for (const fv of fedRows) {
             if (!fv || !fv.name) continue;
-            if (resolvedUuid && fv.uuid === resolvedUuid) continue;
+            if (isCurrentVideoMatch(fv.uuid, null, fv.name)) continue;
+            if (isAlreadyWatchedVideo(fv.uuid, null, fv.name)) continue;
             if (safeSearchEnabled && (fv.nsfw || isContentBlocked(fv.name, blockedKeywordsList))) continue;
 
             const normFv = normalizeTitleForMatch(fv.name);
-            if (!normFv || normFv === normCurrentTitle) continue;
+            if (!normFv) continue;
 
             let fedScore = 0;
             let fedBadge = '';
@@ -1696,7 +1967,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
             }
             if (histOverlap > 0) {
               fedScore += Math.min(48, histOverlap * 24);
-              if (!fedBadge) fedBadge = '🌐 Fediverse • Geçmişinize Göre';
+              if (!fedBadge) fedBadge = '🌐 Fediverse • İzleme Geçmişinize Göre';
             }
 
             if (
@@ -1725,6 +1996,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
               isLive: Boolean(fv.isLive),
               isDownloaded: true,
               isFederated: true,
+              sourceType: 'federated',
               reasonBadge: fedBadge || "🌐 Fediverse'de İzle",
               relevanceScore: fedScore + 20,
               url: `/videos/watch/${fv.uuid}`,
@@ -1743,41 +2015,102 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       }
     }
 
-    // 2. Query YouTube On-Demand for Current Video Topic + User History in Parallel
+    // 2. Query YouTube On-Demand for:
+    //    (a) Current Video Topic
+    //    (b) Same YouTube Channel / Creator (so other videos from the same channel appear!)
+    //    (c) User Watch & Search History (up to 2 distinct interest queries)
     let primaryYtResults = [];
+    let creatorYtResults = [];
     let historyYtResults = [];
 
     try {
-      const tasks = [searchYouTubeRaw(primaryQuery, 18).catch(() => ({ results: [] }))];
-      if (historyQuery && (!safeSearchEnabled || !isContentBlocked(historyQuery, blockedKeywordsList))) {
-        tasks.push(searchYouTubeRaw(historyQuery, 8).catch(() => ({ results: [] })));
-      }
-      const [primaryRes, historyRes] = await Promise.all(tasks);
+      const pTask = searchYouTubeRaw(primaryQuery, 16).catch(() => ({ results: [] }));
+      const cTask =
+        creatorQuery &&
+        normalizeTitleForMatch(creatorQuery) !== normalizeTitleForMatch(primaryQuery) &&
+        (!safeSearchEnabled || !isContentBlocked(creatorQuery, blockedKeywordsList))
+          ? searchYouTubeRaw(creatorQuery, 10).catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] });
+
+      const hTasks = historyQueries
+        .filter(hq => !safeSearchEnabled || !isContentBlocked(hq, blockedKeywordsList))
+        .map(hq => searchYouTubeRaw(hq, 8).catch(() => ({ results: [] })));
+
+      const [primaryRes, creatorRes, ...histResList] = await Promise.all([pTask, cTask, ...hTasks]);
       primaryYtResults = await enrichResultsWithLocalStatus((primaryRes && primaryRes.results) || []);
-      if (historyRes && historyRes.results && historyRes.results.length > 0) {
-        historyYtResults = await enrichResultsWithLocalStatus(historyRes.results);
+      if (creatorRes && creatorRes.results && creatorRes.results.length > 0) {
+        creatorYtResults = await enrichResultsWithLocalStatus(creatorRes.results);
+      }
+      const combinedHistRaw = histResList.flatMap(r => (r && r.results) || []);
+      if (combinedHistRaw.length > 0) {
+        historyYtResults = await enrichResultsWithLocalStatus(combinedHistRaw);
       }
     } catch (e) {}
 
     const scoredYtItems = [];
 
-    // Score primary topic YouTube results
-    primaryYtResults.forEach((item, idx) => {
-      if (!item || !item.id || !item.title) return;
-      if (currentYtId && item.id === currentYtId) return;
-      const normItem = normalizeTitleForMatch(item.title);
-      if (!normItem || normItem === normCurrentTitle) return;
-
-      let score = Math.max(55, 76 - idx * 1.5);
-      let badge = '🔥 Benzer İçerik';
-
+    function matchesSameChannelOrCreator(item) {
+      const normItemTitle = normalizeTitleForMatch(item.title || '');
+      const normItemChan = normalizeTitleForMatch(item.channel || '');
+      if (
+        channelCreatorNorm &&
+        channelCreatorNorm.length >= 3 &&
+        (normItemChan.includes(channelCreatorNorm) ||
+          channelCreatorNorm.includes(normItemChan) ||
+          normItemTitle.includes(channelCreatorNorm))
+      ) {
+        if (normItemChan.length >= 3 || normItemTitle.includes(channelCreatorNorm)) return true;
+      }
       if (
         artistNorm &&
         artistNorm.length >= 3 &&
-        (normItem.includes(artistNorm) || normalizeTitleForMatch(item.channel).includes(artistNorm))
+        (normItemChan.includes(artistNorm) || normItemTitle.includes(artistNorm))
       ) {
-        score += 14;
-        badge = '🔥 Aynı Sanatçı / Kanal';
+        return true;
+      }
+      return false;
+    }
+
+    // Score same-channel / creator YouTube results
+    creatorYtResults.forEach((item, idx) => {
+      if (!item || !item.id || !item.title) return;
+      const localUuid = item.localVideo && item.localVideo.uuid ? item.localVideo.uuid : null;
+      if (isCurrentVideoMatch(localUuid, item.id, item.title)) return;
+      if (isAlreadyWatchedVideo(localUuid, item.id, item.title)) return;
+
+      let score = Math.max(66, 88 - idx * 2);
+      const chanLabel = item.channel || creatorQuery;
+      let badge = chanLabel ? `📺 Aynı Kanaldan • ${chanLabel}` : '📺 Aynı Kanaldan';
+
+      if (item.isDownloaded && item.localVideo) {
+        score += 25;
+        hasDirectLocalMatch = true;
+        badge = `✅ Aynı Kanaldan • ${chanLabel}`;
+      }
+
+      scoredYtItems.push({
+        ...item,
+        reasonBadge: badge,
+        relevanceScore: score,
+        sourceType: 'channel'
+      });
+    });
+
+    // Score primary topic YouTube results
+    primaryYtResults.forEach((item, idx) => {
+      if (!item || !item.id || !item.title) return;
+      const localUuid = item.localVideo && item.localVideo.uuid ? item.localVideo.uuid : null;
+      if (isCurrentVideoMatch(localUuid, item.id, item.title)) return;
+      if (isAlreadyWatchedVideo(localUuid, item.id, item.title)) return;
+
+      let score = Math.max(55, 78 - idx * 1.5);
+      let badge = '🔥 Benzer İçerik';
+      let sType = 'topic';
+
+      if (matchesSameChannelOrCreator(item)) {
+        score += 16;
+        badge = item.channel ? `📺 Aynı Kanaldan • ${item.channel}` : '📺 Aynı Kanaldan / Sanatçı';
+        sType = 'channel';
       }
 
       const itemKws = extractRecommendationKeywords(item.title);
@@ -1792,30 +2125,30 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       if (item.isDownloaded && item.localVideo) {
         score += 25;
         hasDirectLocalMatch = true;
-        badge = "✅ YakTube'da İzle";
+        badge = sType === 'channel' ? `✅ Aynı Kanaldan • ${item.channel || ''}`.trim() : "✅ YakTube'da İzle";
       }
 
       scoredYtItems.push({
         ...item,
         reasonBadge: badge,
         relevanceScore: score,
-        sourceType: 'topic'
+        sourceType: sType
       });
     });
 
-    // Score personalized history YouTube results
+    // Score personalized watch/search history YouTube results
     historyYtResults.forEach((item, idx) => {
       if (!item || !item.id || !item.title) return;
-      if (currentYtId && item.id === currentYtId) return;
-      const normItem = normalizeTitleForMatch(item.title);
-      if (!normItem || normItem === normCurrentTitle) return;
+      const localUuid = item.localVideo && item.localVideo.uuid ? item.localVideo.uuid : null;
+      if (isCurrentVideoMatch(localUuid, item.id, item.title)) return;
+      if (isAlreadyWatchedVideo(localUuid, item.id, item.title)) return;
 
-      let score = Math.max(50, 68 - idx * 2);
-      let badge = '🎯 Geçmişinize Göre';
+      let score = Math.max(54, 74 - idx * 1.8);
+      let badge = '🎯 İzleme Geçmişinize Göre';
 
       if (item.isDownloaded && item.localVideo) {
         score += 22;
-        badge = '✅ Geçmişinize Göre';
+        badge = '✅ İzleme Geçmişinize Göre';
       }
 
       scoredYtItems.push({
@@ -1826,31 +2159,87 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       });
     });
 
-    // 3. Merge, Deduplicate & Rank
+    // 3. Merge, Deduplicate & Interleave (Channel + Topic + Watch History, just like YouTube)
     const combined = [...scoredLocalItems, ...scoredYtItems];
     combined.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
 
-    const finalResults = [];
+    const dedupedPool = [];
     const seenIds = new Set();
     const seenUuids = new Set();
     const seenNormTitles = new Set();
+    const seenCoreTitles = new Set();
 
     for (const item of combined) {
       const normT = normalizeTitleForMatch(item.title);
+      const coreT = normalizeCoreVideoTitle(item.title);
       if (!normT || normT === normCurrentTitle) continue;
+      if (coreT && coreCurrentTitle && coreT.length >= 5 && coreT === coreCurrentTitle) continue;
       if (item.id && seenIds.has(item.id)) continue;
       if (item.localVideo && item.localVideo.uuid && seenUuids.has(item.localVideo.uuid)) continue;
       if (seenNormTitles.has(normT)) continue;
+      if (coreT && coreT.length >= 5 && seenCoreTitles.has(coreT)) continue;
 
       if (item.id) seenIds.add(item.id);
       if (item.localVideo && item.localVideo.uuid) seenUuids.add(item.localVideo.uuid);
       seenNormTitles.add(normT);
+      if (coreT && coreT.length >= 5) seenCoreTitles.add(coreT);
 
-      finalResults.push(item);
-      if (finalResults.length >= 24) break;
+      dedupedPool.push(item);
     }
 
-    // Identify #1 undownloaded topic match for optional background smart pre-fetch
+    // Ensure a rich YouTube-like mix in the top results:
+    // - #1 is the highest-scoring unwatched Same-Channel or Topic match (for seamless Autoplay)
+    // - Interleave Same-Channel ('channel'), Topic ('topic'), and Watch History ('history') items
+    const channelBucket = dedupedPool.filter(i => i.sourceType === 'channel');
+    const historyBucket = dedupedPool.filter(i => i.sourceType === 'history');
+    const topicBucket = dedupedPool.filter(i => i.sourceType !== 'channel' && i.sourceType !== 'history');
+
+    const finalResults = [];
+    const pickedSet = new Set();
+    function pushUnique(candidate) {
+      if (!candidate || pickedSet.has(candidate)) return false;
+      pickedSet.add(candidate);
+      finalResults.push(candidate);
+      return true;
+    }
+
+    // Slot #1 (Up Next Autoplay): Best Same-Channel or Topic video
+    if (
+      channelBucket.length > 0 &&
+      (!topicBucket[0] || channelBucket[0].relevanceScore >= topicBucket[0].relevanceScore - 10)
+    ) {
+      pushUnique(channelBucket[0]);
+    } else if (topicBucket.length > 0) {
+      pushUnique(topicBucket[0]);
+    }
+
+    // Interleave remaining top candidates so the user sees Same-Channel, Topic, and History videos together
+    let cIdx = 0;
+    let tIdx = 0;
+    let hIdx = 0;
+    while (
+      finalResults.length < 24 &&
+      (cIdx < channelBucket.length || tIdx < topicBucket.length || hIdx < historyBucket.length)
+    ) {
+      if (cIdx < channelBucket.length) pushUnique(channelBucket[cIdx++]);
+      if (tIdx < topicBucket.length) pushUnique(topicBucket[tIdx++]);
+      if (tIdx < topicBucket.length) pushUnique(topicBucket[tIdx++]);
+      if (hIdx < historyBucket.length) pushUnique(historyBucket[hIdx++]);
+    }
+
+    // Only if there are almost no unwatched results (< 4), append watched fallbacks at the very bottom (never #1)
+    if (finalResults.length < 4 && watchedFallbackItems.length > 0) {
+      for (const wf of watchedFallbackItems) {
+        if (finalResults.length >= 8) break;
+        const normT = normalizeTitleForMatch(wf.title);
+        if (!seenNormTitles.has(normT)) {
+          seenNormTitles.add(normT);
+          finalResults.push(wf);
+        }
+      }
+    }
+
+    // Identify #1 undownloaded match for optional background smart pre-fetch
     const topPrefetchCandidate =
       finalResults.find(
         it =>
@@ -1864,7 +2253,9 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     return res.json({
       ok: true,
       query: primaryQuery,
-      historyQuery: historyQuery || null,
+      creatorQuery: creatorQuery || null,
+      historyQuery: historyQueries[0] || null,
+      historyQueries,
       hasLocalMatch: hasDirectLocalMatch,
       smartPrefetchMode,
       federatedRecommendationsMode,
