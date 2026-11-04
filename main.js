@@ -901,6 +901,8 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
          FROM "videoImport" vi
          INNER JOIN "video" v ON v.id = vi."videoId"
          WHERE vi."targetUrl" IS NOT NULL
+           AND v.state = 1
+           AND (vi.state IS NULL OR vi.state != 3)
          ORDER BY vi.id DESC`
       );
       const localVideos = await dbQuery(
@@ -1238,9 +1240,59 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     });
   }
 
+  function isCrawlerBotRequest(req) {
+    const ua = String((req && req.headers && req.headers['user-agent']) || '').toLowerCase();
+    if (!ua) return false;
+    return /applebot|reflectionbot|googlebot|bingbot|yandexbot|baiduspider|duckduckbot|slurp|ahrefsbot|semrushbot|mj12bot|dotbot|petalbot|bytespider|facebookexternalhit|twitterbot|discordbot|telegrambot|whatsapp|linkedinbot|headlesschrome/i.test(
+      ua
+    );
+  }
+
+  function extractYouTubeIdFromUrl(urlStr) {
+    if (!urlStr || typeof urlStr !== 'string') return null;
+    const m =
+      urlStr.match(/[?&]v=([a-zA-Z0-9_-]{11})/) ||
+      urlStr.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/) ||
+      urlStr.match(/shorts\/([a-zA-Z0-9_-]{11})/) ||
+      urlStr.match(/embed\/([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+
+  function translateImportErrorMessage(rawErrStr) {
+    const s = String(rawErrStr || '').toLowerCase();
+    if (
+      s.includes('confirm your age') ||
+      s.includes('age-restricted') ||
+      s.includes('age_restriction') ||
+      s.includes('inappropriate for some users')
+    ) {
+      return 'Bu video YouTube tarafından +18 yaş kısıtlamalı (oturum açma zorunlu) olarak işaretlendiği için sunucuya aktarılamamaktadır.';
+    }
+    if (s.includes('live streaming') || s.includes('is_live') || s.includes('live event')) {
+      return 'Canlı yayınlar video dosyası olarak indirilemez. Lütfen Canlı Yayını İzle modunu kullanın.';
+    }
+    if (
+      s.includes('private video') ||
+      s.includes('video unavailable') ||
+      s.includes('has been removed') ||
+      s.includes('not available in your country')
+    ) {
+      return "Bu video YouTube'da gizli, silinmiş veya erişime kapalı durumda olduğu için aktarılamadı.";
+    }
+    if (s.includes('confirm you’re not a bot') || s.includes('confirm you are not a bot') || s.includes(' 429 ')) {
+      return 'YouTube geçici yoğunluk sınırı nedeniyle bağlantıyı kısıtladı. Lütfen birkaç saniye sonra tekrar deneyin.';
+    }
+    return "Bu video şu anda YouTube'dan aktarılamadı. Lütfen tekrar deneyin veya başka bir video seçin.";
+  }
+
+  const inFlightImportPromises = new Map();
+
   // 2. YouTube Search Route (aliases: /youtube-search and /search)
   async function handleYouTubeSearch(req, res) {
     await loadPluginSettings();
+    if (isCrawlerBotRequest(req)) {
+      return res.json({ results: [], cached: true, botIgnored: true, guestImportLimit });
+    }
     const query = (req.query.q || '').trim();
     if (!query || query.length < 2) {
       return res.json({ results: [], guestImportLimit });
@@ -1336,6 +1388,16 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
   router.get('/smart-recommendations', async (req, res) => {
     await loadPluginSettings();
+    if (isCrawlerBotRequest(req)) {
+      return res.json({
+        ok: true,
+        results: [],
+        hasLocalMatch: false,
+        botIgnored: true,
+        smartPrefetchMode,
+        guestImportLimit
+      });
+    }
     const rawUuid = (req.query.uuid || '').trim();
     const rawTitle = (req.query.title || '').trim();
     const rawChannel = (req.query.channel || '').trim();
@@ -1822,14 +1884,21 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
   // 3. On-Demand Video Import Route (aliases: /ondemand-import and /import)
   async function handleOnDemandImport(req, res) {
     await loadPluginSettings();
+    if (isCrawlerBotRequest(req)) {
+      return res.status(403).json({ ok: false, error: 'Automated bot requests are not allowed to import videos.' });
+    }
     const { targetUrl, title, channelId, isAuthenticated, guestImportCount } = req.body || {};
     if (!targetUrl || (!targetUrl.includes('youtube.com') && !targetUrl.includes('youtu.be'))) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
+    const ytId = extractYouTubeIdFromUrl(targetUrl);
+    const normalizedTargetUrl = ytId ? `https://www.youtube.com/watch?v=${ytId}` : targetUrl.trim();
+    const dedupeKey = ytId || normalizedTargetUrl;
+
     if (
       safeSearchEnabled &&
-      (isContentBlocked(title, blockedKeywordsList) || isContentBlocked(targetUrl, blockedKeywordsList))
+      (isContentBlocked(title, blockedKeywordsList) || isContentBlocked(normalizedTargetUrl, blockedKeywordsList))
     ) {
       return res.status(403).json({
         ok: false,
@@ -1837,6 +1906,90 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         error:
           "Bu video içeriği, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince YakTube'a aktarılamaz."
       });
+    }
+
+    // 1. Check DB for already published, currently importing, or previously failed records for this YouTube video
+    try {
+      const searchPattern = ytId ? `%${ytId}%` : normalizedTargetUrl;
+      const existingRows = await dbQuery(
+        `SELECT vi.id AS "importId", vi.state AS "importState",
+                v.id, v.uuid, v.name, v.state AS "videoState", v."updatedAt"
+         FROM "videoImport" vi
+         INNER JOIN "video" v ON v.id = vi."videoId"
+         WHERE vi."targetUrl" LIKE $1
+         ORDER BY vi.id DESC`,
+        [searchPattern]
+      );
+
+      const publishedRow = existingRows.find(r => Number(r.videoState) === 1);
+      if (publishedRow) {
+        return res.json({
+          ok: true,
+          alreadyImported: true,
+          importId: publishedRow.importId,
+          video: {
+            id: publishedRow.id,
+            uuid: publishedRow.uuid,
+            name: publishedRow.name,
+            url: '/videos/watch/' + publishedRow.uuid
+          }
+        });
+      }
+
+      const activeRow = existingRows.find(r => {
+        const vState = Number(r.videoState);
+        const iState = Number(r.importState);
+        const ageMs = r.updatedAt ? Date.now() - new Date(r.updatedAt).getTime() : 0;
+        return (vState === 2 || vState === 3) && iState !== 3 && iState !== 4 && ageMs < 10 * 60 * 1000;
+      });
+      if (activeRow) {
+        return res.json({
+          ok: true,
+          inProgress: true,
+          importId: activeRow.importId,
+          video: {
+            id: activeRow.id,
+            uuid: activeRow.uuid,
+            name: activeRow.name,
+            url: '/videos/watch/' + activeRow.uuid
+          }
+        });
+      }
+
+      // Clean up any failed (v.state = 12 / vi.state = 3) or stale (>15 min in state 3) rows before re-importing
+      const staleOrFailedRows = existingRows.filter(r => {
+        const vState = Number(r.videoState);
+        const iState = Number(r.importState);
+        const ageMs = r.updatedAt ? Date.now() - new Date(r.updatedAt).getTime() : 0;
+        return vState === 12 || iState === 3 || (vState === 3 && ageMs >= 15 * 60 * 1000);
+      });
+      if (staleOrFailedRows.length > 0) {
+        const badImportIds = staleOrFailedRows.map(r => r.importId).filter(Boolean);
+        const badVideoIds = staleOrFailedRows.map(r => r.id).filter(Boolean);
+        if (badImportIds.length > 0) {
+          await dbQuery(`DELETE FROM "videoImport" WHERE id = ANY($1::int[])`, [badImportIds]);
+        }
+        if (badVideoIds.length > 0) {
+          await dbQuery(
+            `DELETE FROM "video" v
+             WHERE v.id = ANY($1::int[])
+               AND v.state IN (3, 12)
+               AND NOT EXISTS (SELECT 1 FROM "videoFile" vf WHERE vf."videoId" = v.id)
+               AND NOT EXISTS (SELECT 1 FROM "videoStreamingPlaylist" vsp WHERE vsp."videoId" = v.id)`,
+            [badVideoIds]
+          );
+        }
+      }
+    } catch (dbCheckErr) {}
+
+    // 2. If another request is already initiating an import for this exact video right now, await it
+    if (inFlightImportPromises.has(dedupeKey)) {
+      try {
+        const sharedResult = await inFlightImportPromises.get(dedupeKey);
+        return res.status(sharedResult.status).json(sharedResult.payload);
+      } catch (sharedErr) {
+        return res.status(500).json({ error: sharedErr.message });
+      }
     }
 
     const isLoggedUser = await isRequestAuthenticated(req, res, isAuthenticated);
@@ -1856,65 +2009,96 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     // Non-blocking background check to prune old videos if disk usage exceeds maxDiskUsagePercent
     checkAndPruneStorage().catch(() => {});
 
-    try {
+    const importPromise = (async () => {
       const token = await getAdminToken();
       const resolvedChannelId = await resolveTargetChannelId(title, channelId);
       const { hostname, port, hostHeader } = getLocalServerTarget();
       const postData = new URLSearchParams({
-        targetUrl: targetUrl,
+        targetUrl: normalizedTargetUrl,
         channelId: resolvedChannelId,
         privacy: '1'
       }).toString();
 
-      const importReq = http.request(
-        {
-          hostname,
-          port,
-          path: '/api/v1/videos/imports',
-          method: 'POST',
-          headers: {
-            Host: hostHeader,
-            Authorization: 'Bearer ' + token,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Content-Length': Buffer.byteLength(postData)
-          }
-        },
-        importRes => {
-          let body = '';
-          importRes.on('data', c => (body += c));
-          importRes.on('end', () => {
-            try {
-              const data = JSON.parse(body);
-              if (data && data.video) {
-                return res.json({
-                  ok: true,
-                  importId: data.id,
-                  video: {
-                    id: data.video.id,
-                    uuid: data.video.uuid,
-                    shortUUID: data.video.shortUUID,
-                    name: data.video.name,
-                    url: data.video.url
+      return await new Promise((resolve, reject) => {
+        const importReq = http.request(
+          {
+            hostname,
+            port,
+            path: '/api/v1/videos/imports',
+            method: 'POST',
+            headers: {
+              Host: hostHeader,
+              Authorization: 'Bearer ' + token,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Length': Buffer.byteLength(postData)
+            }
+          },
+          importRes => {
+            let body = '';
+            importRes.on('data', c => (body += c));
+            importRes.on('end', () => {
+              try {
+                const data = JSON.parse(body);
+                if (data && data.video) {
+                  return resolve({
+                    status: 200,
+                    payload: {
+                      ok: true,
+                      importId: data.id,
+                      video: {
+                        id: data.video.id,
+                        uuid: data.video.uuid,
+                        shortUUID: data.video.shortUUID,
+                        name: data.video.name,
+                        url: data.video.url
+                      }
+                    }
+                  });
+                } else {
+                  const friendlyMsg = translateImportErrorMessage(body);
+                  return resolve({
+                    status: 400,
+                    payload: {
+                      ok: false,
+                      error: friendlyMsg,
+                      userMessage: friendlyMsg,
+                      details: data
+                    }
+                  });
+                }
+              } catch (e) {
+                const friendlyMsg = translateImportErrorMessage(body);
+                return resolve({
+                  status: 500,
+                  payload: {
+                    ok: false,
+                    error: friendlyMsg,
+                    userMessage: friendlyMsg,
+                    raw: body
                   }
                 });
-              } else {
-                return res.status(400).json({ error: 'Import initiation failed', details: data });
               }
-            } catch (e) {
-              return res.status(500).json({ error: 'Error parsing import response', raw: body });
-            }
-          });
-        }
-      );
+            });
+          }
+        );
 
-      importReq.on('error', err => {
-        return res.status(500).json({ error: 'HTTP error connecting to PeerTube API', details: err.message });
+        importReq.on('error', err => {
+          reject(err);
+        });
+
+        importReq.write(postData);
+        importReq.end();
       });
+    })();
 
-      importReq.write(postData);
-      importReq.end();
+    inFlightImportPromises.set(dedupeKey, importPromise);
+    try {
+      const outcome = await importPromise;
+      return res.status(outcome.status).json(outcome.payload);
     } catch (err) {
-      return res.status(500).json({ error: 'Admin authentication failed', details: err.message });
+      return res.status(500).json({ error: 'Admin authentication or HTTP connection failed', details: err.message });
+    } finally {
+      inFlightImportPromises.delete(dedupeKey);
     }
   }
 
@@ -1936,7 +2120,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       resVideo => {
         let body = '';
         resVideo.on('data', c => (body += c));
-        resVideo.on('end', () => {
+        resVideo.on('end', async () => {
           try {
             const video = JSON.parse(body);
             const isPublished = video.state && video.state.id === 1;
@@ -1946,6 +2130,30 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
             const hasFiles =
               (video.files && video.files.length > 0) ||
               (video.streamingPlaylists && video.streamingPlaylists.length > 0);
+
+            let errorMessage = null;
+            if (isFailed && video.id) {
+              try {
+                const errRows = await dbQuery(
+                  `SELECT id, error FROM "videoImport" WHERE "videoId" = $1 ORDER BY id DESC LIMIT 1`,
+                  [video.id]
+                );
+                const rawErr = errRows.length > 0 ? errRows[0].error : '';
+                errorMessage = translateImportErrorMessage(rawErr);
+                // Auto-cleanup failed import and orphan state=12 video so it never pollutes search or library
+                await dbQuery(`DELETE FROM "videoImport" WHERE "videoId" = $1 AND state = 3`, [video.id]);
+                if (!hasFiles) {
+                  await dbQuery(
+                    `DELETE FROM "video" v
+                     WHERE v.id = $1
+                       AND v.state = 12
+                       AND NOT EXISTS (SELECT 1 FROM "videoFile" vf WHERE vf."videoId" = v.id)
+                       AND NOT EXISTS (SELECT 1 FROM "videoStreamingPlaylist" vsp WHERE vsp."videoId" = v.id)`,
+                    [video.id]
+                  );
+                }
+              } catch (cleanErr) {}
+            }
 
             return res.json({
               id: video.id,
@@ -1958,6 +2166,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
               isImporting,
               isFailed,
               hasFiles,
+              errorMessage,
               url: video.url,
               isLocal: video.isLocal
             });

@@ -4320,10 +4320,20 @@ try {
             }
 
             if (!data || !data.ok) {
-              throw new Error(data && data.error ? data.error : 'İçe aktarma başlatılamadı.');
+              throw new Error(
+                (data && (data.userMessage || data.error)) || 'İçe aktarma başlatılamadı. Lütfen tekrar deneyin.'
+              );
             }
 
-            if (!loggedIn) {
+            if (data.alreadyImported && data.video && data.video.uuid) {
+              showModal('🎉 Video Hazır!', 'Bu video zaten sunucumuzda mevcut. Oynatıcı açılıyor...');
+              setTimeout(function () {
+                window.location.href = '/videos/watch/' + data.video.uuid;
+              }, 350);
+              return;
+            }
+
+            if (!loggedIn && !data.inProgress) {
               incrementGuestImportCount();
             }
 
@@ -4331,14 +4341,18 @@ try {
             var videoUuid = data.video.uuid;
 
             var attempts = 0;
+            var isRequestInFlight = false;
             var pollInterval = setInterval(function () {
+              if (isRequestInFlight) return;
               attempts++;
+              isRequestInFlight = true;
               fetchPluginJson('/status/' + videoId)
                 .then(function (sData) {
+                  isRequestInFlight = false;
                   if (sData.isImporting) {
                     showModal(
                       '[1/2] 📥 Video İndiriliyor...',
-                      'Video sunucuya indiriliyor (' + attempts * 2 + ' sn)...'
+                      'Video yüksek hızla sunucuya indiriliyor (' + Math.round(attempts * 1.5) + ' sn)...'
                     );
                   } else if (sData.isTranscoding) {
                     showModal(
@@ -4347,43 +4361,45 @@ try {
                     );
                   }
 
-                  if (sData.isPublished || (sData.hasFiles && attempts >= 8)) {
+                  if (sData.isPublished || (sData.hasFiles && !sData.isImporting && !sData.isFailed && attempts >= 4)) {
                     clearInterval(pollInterval);
                     showModal('🎉 Video Hazır!', 'Video kütüphanenize eklendi. Oynatıcı açılıyor...');
                     setTimeout(function () {
                       window.location.href = '/videos/watch/' + (sData.uuid || videoUuid);
-                    }, 600);
+                    }, 500);
                   } else if (sData.isFailed) {
                     clearInterval(pollInterval);
-                    hideModal();
                     btn.disabled = false;
                     btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
-                    alert('Video indirme sırasında bir hata oluştu.');
-                    announce('Video indirme sırasında bir hata oluştu.', true);
+                    var failMsg =
+                      sData.errorMessage ||
+                      "Bu video şu anda YouTube'dan aktarılamadı. Lütfen tekrar deneyin veya başka bir video seçin.";
+                    showModal('⚠️ Video Aktarma Hatası', failMsg);
+                    announce(failMsg, true);
                   }
                 })
                 .catch(function (e) {
+                  isRequestInFlight = false;
                   console.error('[YakTube] Status poll error:', e);
                 });
 
-              if (attempts > 35) {
+              if (attempts > 120) {
                 clearInterval(pollInterval);
-                hideModal();
                 btn.disabled = false;
                 btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
-                alert(
-                  'İndirme arka planda tamamlanıyor. Ana sayfada veya Videolarım sayfasında kısa süre içinde hazır olacaktır.'
-                );
-                announce('İndirme arka planda tamamlanıyor. Ana sayfada kısa süre içinde hazır olacaktır.');
+                var bgMsg =
+                  'Bu video uzun süreli olduğu için arka planda indirilmeye devam ediyor. Kısa süre içinde hazır olacaktır.';
+                showModal('⏳ Arka Planda Tamamlanıyor', bgMsg);
+                announce(bgMsg);
               }
             }, 1500);
           })
           .catch(function (err) {
-            hideModal();
             btn.disabled = false;
             btn.innerHTML = '📥 ' + escapeHtml(getInstanceName()) + "'a Aktar & İzle";
-            alert('İndirme hatası: ' + err.message);
-            announce('İndirme hatası: ' + err.message, true);
+            var errMsg = (err && err.message) || 'Video aktarılırken beklenmeyen bir hata oluştu.';
+            showModal('⚠️ Video Aktarma Hatası', errMsg);
+            announce('İndirme hatası: ' + errMsg, true);
           });
       });
     }
@@ -6276,18 +6292,46 @@ try {
           }
           var videoId = data.video.id;
           var videoUuid = data.video.uuid;
+
+          if (data.alreadyImported && videoUuid) {
+            var immediateWatchUrl = '/videos/watch/' + videoUuid;
+            smartPrefetchState.status = 'ready';
+            smartPrefetchState.readyUrl = immediateWatchUrl;
+            smartHasLocalMatch = true;
+            cachedRelatedResults.forEach(function (it) {
+              if ((candidate.id && it.id === candidate.id) || (candidate.url && it.url === candidate.url)) {
+                it.isDownloaded = true;
+                it.reasonBadge = '⚡ Sıradaki Öneri Hazır';
+                it.localVideo = {
+                  id: videoId,
+                  uuid: videoUuid,
+                  name: (data.video && data.video.name) || candidate.title,
+                  url: immediateWatchUrl
+                };
+              }
+            });
+            var relC = document.getElementById('yaktube-hybrid-related-container');
+            if (relC && cachedRelatedResults.length > 0) {
+              renderRelatedCards(relC, cachedRelatedResults, cachedRelatedQuery);
+            }
+            return;
+          }
+
           var attempts = 0;
 
           smartPrefetchState.pollTimer = setInterval(function () {
             attempts++;
-            if (currentActiveVideoKey !== videoKey || attempts > 45) {
+            if (currentActiveVideoKey !== videoKey || attempts > 90) {
               clearInterval(smartPrefetchState.pollTimer);
               smartPrefetchState.pollTimer = null;
               return;
             }
             fetchPluginJson('/status/' + videoId)
               .then(function (sData) {
-                if (sData && (sData.isPublished || (sData.hasFiles && attempts >= 8))) {
+                if (
+                  sData &&
+                  (sData.isPublished || (sData.hasFiles && !sData.isImporting && !sData.isFailed && attempts >= 4))
+                ) {
                   clearInterval(smartPrefetchState.pollTimer);
                   smartPrefetchState.pollTimer = null;
                   var watchUrl = '/videos/watch/' + (sData.uuid || videoUuid);
