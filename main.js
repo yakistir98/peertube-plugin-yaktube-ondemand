@@ -3,48 +3,248 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 
 const searchCache = new Map();
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 let cachedYtDlpPath = null;
-function resolveYtDlpPath(logger, customPath) {
-  if (customPath && String(customPath).trim() && fs.existsSync(String(customPath).trim())) {
-    return String(customPath).trim();
-  }
+let cachedYtDlpCustomSetting = null;
+let autoDownloadPromise = null;
 
-  if (cachedYtDlpPath && (cachedYtDlpPath === 'yt-dlp' || fs.existsSync(cachedYtDlpPath))) {
-    return cachedYtDlpPath;
-  }
-
-  if (process.env.YTDLP_PATH && fs.existsSync(process.env.YTDLP_PATH)) {
-    cachedYtDlpPath = process.env.YTDLP_PATH;
-    return cachedYtDlpPath;
-  }
-
-  const isWin = process.platform === 'win32';
-  const candidates = isWin
-    ? [
-        'D:\\yaktube_storage\\bin\\yt-dlp.exe',
-        'C:\\laragon\\bin\\yt-dlp.exe',
-        path.join(process.cwd(), 'bin', 'yt-dlp.exe'),
-        'yt-dlp.exe'
-      ]
-    : ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp', '/bin/yt-dlp', path.join(process.cwd(), 'bin', 'yt-dlp'), 'yt-dlp'];
-
-  for (const candidate of candidates) {
-    try {
-      if (candidate.includes(path.sep) && fs.existsSync(candidate)) {
-        cachedYtDlpPath = candidate;
-        if (logger) logger.info(`[YakTube OnDemand] Auto-detected yt-dlp binary at: ${cachedYtDlpPath}`);
-        return cachedYtDlpPath;
+function isExecutableFile(filePath) {
+  if (!filePath || typeof filePath !== 'string') return false;
+  try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size < 1024) return false;
+    if (process.platform !== 'win32') {
+      try {
+        fs.accessSync(filePath, fs.constants.X_OK);
+      } catch (_) {
+        try {
+          fs.chmodSync(filePath, 0o755);
+        } catch (__) {}
       }
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function discoverDynamicCandidatePaths(peertubeHelpers) {
+  const isWin = process.platform === 'win32';
+  const binNames = isWin ? ['yt-dlp.exe', 'yt-dlp'] : ['yt-dlp', 'yt-dlp_linux', 'yt-dlp_macos'];
+  const searchDirs = new Set();
+
+  function addWithParents(startDir, maxUp = 4) {
+    if (!startDir || typeof startDir !== 'string') return;
+    let cur = path.resolve(startDir);
+    for (let i = 0; i <= maxUp; i++) {
+      searchDirs.add(cur);
+      searchDirs.add(path.join(cur, 'bin'));
+      searchDirs.add(path.join(cur, 'storage', 'bin'));
+      const parent = path.dirname(cur);
+      if (!parent || parent === cur) break;
+      cur = parent;
+    }
+  }
+
+  // 1. PeerTube plugin data directory & its parent storage directory (e.g. /var/www/peertube/storage/bin/yt-dlp or /data/bin/yt-dlp)
+  try {
+    if (
+      peertubeHelpers &&
+      peertubeHelpers.plugin &&
+      typeof peertubeHelpers.plugin.getDataDirectoryPath === 'function'
+    ) {
+      addWithParents(peertubeHelpers.plugin.getDataDirectoryPath(), 4);
+    }
+  } catch (e) {}
+
+  // 2. Plugin installation directory (__dirname) & working directory (process.cwd())
+  addWithParents(__dirname, 4);
+  addWithParents(process.cwd(), 3);
+
+  // 3. System PATH environment variable directories (pure Node.js `which` / `where` equivalent)
+  const pathEnv = process.env.PATH || process.env.Path || '';
+  for (const dir of pathEnv.split(path.delimiter)) {
+    const cleanDir = dir.trim();
+    if (cleanDir) searchDirs.add(cleanDir);
+  }
+
+  // 4. Common Linux, Docker, macOS, and Windows binary locations
+  if (isWin) {
+    searchDirs.add('D:\\yaktube_storage\\bin');
+    searchDirs.add('C:\\yaktube_storage\\bin');
+    searchDirs.add('C:\\laragon\\bin');
+    searchDirs.add('C:\\ProgramData\\chocolatey\\bin');
+    if (process.env.LOCALAPPDATA) {
+      searchDirs.add(path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'));
+    }
+    if (process.env.USERPROFILE) {
+      searchDirs.add(path.join(process.env.USERPROFILE, 'scoop', 'shims'));
+      searchDirs.add(path.join(process.env.USERPROFILE, 'AppData', 'Local', 'Microsoft', 'WinGet', 'Links'));
+    }
+  } else {
+    searchDirs.add('/var/www/peertube/storage/bin');
+    searchDirs.add('/var/lib/peertube/storage/bin');
+    searchDirs.add('/data/bin');
+    searchDirs.add('/usr/local/bin');
+    searchDirs.add('/usr/bin');
+    searchDirs.add('/bin');
+    searchDirs.add('/snap/bin');
+    searchDirs.add('/opt/homebrew/bin');
+    searchDirs.add('/home/peertube/.local/bin');
+    try {
+      const home = os.homedir();
+      if (home) searchDirs.add(path.join(home, '.local', 'bin'));
     } catch (e) {}
   }
 
-  cachedYtDlpPath = isWin ? 'D:\\yaktube_storage\\bin\\yt-dlp.exe' : 'yt-dlp';
-  return cachedYtDlpPath;
+  const candidates = [];
+  for (const dir of searchDirs) {
+    for (const bName of binNames) {
+      candidates.push(path.join(dir, bName));
+    }
+  }
+  return candidates;
+}
+
+function resolveYtDlpPath(logger, customPath, peertubeHelpers) {
+  const cleanCustom = customPath ? String(customPath).trim() : '';
+  if (cleanCustom && isExecutableFile(cleanCustom)) {
+    if (cachedYtDlpPath !== cleanCustom) {
+      cachedYtDlpPath = cleanCustom;
+      cachedYtDlpCustomSetting = cleanCustom;
+      if (logger) logger.info(`[YakTube OnDemand] Using custom configured yt-dlp binary at: ${cachedYtDlpPath}`);
+    }
+    return cachedYtDlpPath;
+  }
+
+  if (cachedYtDlpPath && cachedYtDlpCustomSetting === cleanCustom && isExecutableFile(cachedYtDlpPath)) {
+    return cachedYtDlpPath;
+  }
+
+  if (process.env.YTDLP_PATH && isExecutableFile(process.env.YTDLP_PATH)) {
+    cachedYtDlpPath = process.env.YTDLP_PATH;
+    cachedYtDlpCustomSetting = cleanCustom;
+    if (logger) logger.info(`[YakTube OnDemand] Using YTDLP_PATH binary at: ${cachedYtDlpPath}`);
+    return cachedYtDlpPath;
+  }
+
+  const candidates = discoverDynamicCandidatePaths(peertubeHelpers);
+  for (const candidate of candidates) {
+    if (isExecutableFile(candidate)) {
+      cachedYtDlpPath = candidate;
+      cachedYtDlpCustomSetting = cleanCustom;
+      if (logger)
+        logger.info(`[YakTube OnDemand] Auto-detected yt-dlp binary (${process.platform}) at: ${cachedYtDlpPath}`);
+      return cachedYtDlpPath;
+    }
+  }
+
+  // Trigger background auto-download if not found on disk yet
+  ensureYtDlpBinaryDownloaded(logger, peertubeHelpers).catch(() => {});
+
+  return process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+}
+
+function downloadFileFollowRedirects(url, destPath, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    if (maxRedirects < 0) return reject(new Error('Too many redirects'));
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(
+      url,
+      {
+        headers: {
+          'User-Agent': 'YakTube-OnDemand-Plugin/1.7 (PeerTube)'
+        },
+        timeout: 60000
+      },
+      res => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          const nextUrl = new URL(res.headers.location, url).toString();
+          return resolve(downloadFileFollowRedirects(nextUrl, destPath, maxRedirects - 1));
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`HTTP ${res.statusCode} when downloading yt-dlp`));
+        }
+        const tmpPath = `${destPath}.tmp-${process.pid}`;
+        const fileStream = fs.createWriteStream(tmpPath, { mode: 0o755 });
+        res.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close(() => {
+            try {
+              if (process.platform !== 'win32') {
+                fs.chmodSync(tmpPath, 0o755);
+              }
+              fs.renameSync(tmpPath, destPath);
+              resolve(destPath);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
+        fileStream.on('error', err => {
+          try {
+            fs.unlinkSync(tmpPath);
+          } catch (_) {}
+          reject(err);
+        });
+      }
+    );
+    req.on('error', reject);
+  });
+}
+
+async function ensureYtDlpBinaryDownloaded(logger, peertubeHelpers) {
+  if (autoDownloadPromise) return autoDownloadPromise;
+  autoDownloadPromise = (async () => {
+    try {
+      const isWin = process.platform === 'win32';
+      const isMac = process.platform === 'darwin';
+      const assetName = isWin ? 'yt-dlp.exe' : isMac ? 'yt-dlp_macos' : 'yt-dlp';
+      const targetFileName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+
+      let targetDir = path.join(__dirname, 'bin');
+      try {
+        if (
+          peertubeHelpers &&
+          peertubeHelpers.plugin &&
+          typeof peertubeHelpers.plugin.getDataDirectoryPath === 'function'
+        ) {
+          targetDir = path.join(peertubeHelpers.plugin.getDataDirectoryPath(), 'bin');
+        }
+      } catch (e) {}
+
+      fs.mkdirSync(targetDir, { recursive: true });
+      const targetPath = path.join(targetDir, targetFileName);
+      if (isExecutableFile(targetPath)) {
+        cachedYtDlpPath = targetPath;
+        return targetPath;
+      }
+
+      const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${assetName}`;
+      if (logger) {
+        logger.info(`[YakTube OnDemand] yt-dlp not found on system; auto-downloading ${assetName} to ${targetPath}...`);
+      }
+      await downloadFileFollowRedirects(downloadUrl, targetPath);
+      if (isExecutableFile(targetPath)) {
+        cachedYtDlpPath = targetPath;
+        if (logger) logger.info(`[YakTube OnDemand] Successfully auto-installed yt-dlp at: ${targetPath}`);
+        return targetPath;
+      }
+    } catch (e) {
+      if (logger) logger.warn(`[YakTube OnDemand] Auto-download of yt-dlp warning: ${e.message}`);
+    } finally {
+      autoDownloadPromise = null;
+    }
+    return null;
+  })();
+  return autoDownloadPromise;
 }
 
 function getCached(q) {
@@ -700,6 +900,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
   if (settingsManager && typeof settingsManager.onSettingsChange === 'function') {
     settingsManager.onSettingsChange(loadPluginSettings);
   }
+  resolveYtDlpPath(logger, customYtDlpPath, peertubeHelpers);
 
   // Helper to run SQL queries via PeerTube's built-in Sequelize instance (works on ANY PeerTube server without bridge.js)
   async function dbQuery(sql, bindParams = []) {
@@ -1176,7 +1377,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         return resolve({ results: filteredCached.slice(0, maxCount), cached: true });
       }
 
-      const ytdlpPath = resolveYtDlpPath(logger, customYtDlpPath);
+      const ytdlpPath = resolveYtDlpPath(logger, customYtDlpPath, peertubeHelpers);
       const args = [
         `ytsearch${maxCount}:${cleanQ}`,
         '--dump-single-json',
