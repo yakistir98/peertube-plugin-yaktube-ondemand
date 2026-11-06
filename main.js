@@ -981,77 +981,162 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     throw new Error('Could not resolve or generate admin OAuth token');
   }
 
+  function classifyVideoCategoryAndChannel(title, currentCategory, tags, description) {
+    const rawT = String(title || '');
+    const t = rawT.toLocaleLowerCase('tr');
+    const tagStr = Array.isArray(tags) ? tags.filter(Boolean).join(' ').toLocaleLowerCase('tr') : '';
+    const descStr = String(description || '')
+      .slice(0, 400)
+      .toLocaleLowerCase('tr');
+    const combined = `${t} ${tagStr}`;
+    const fullText = `${combined} ${descStr}`;
+
+    const cat = currentCategory ? Number(currentCategory) : null;
+
+    // 1. Music (Category 1 -> YakTube Müzik)
+    const musicPattern =
+      /\b(müzik|muzik|music|musik|muziek|musiqi|müzikleri|muzikleri|şarkı|sarki|şarkılar|sarkilar|klip|video\s*klip|official\s*video|official\s*music|official\s*audio|audio|karaoke|kareoke|akustik|acoustic|enstrümantal|enstrumantal|instrumental|sözleri|sozleri|lyrics|lyric|remix|mix|mashup|cover|ai\s*cover|freestyle|konser|canlı\s*performans|performans|netd|sony\s*music|dmc|poll\s*production|mahzen|tfb\s*records|dokuz\s*sekiz|avrupa\s*müzik|pasaj\s*müzik|türkçe\s*pop|turkce\s*pop|arabesk|rap|hip\s*hop|boombesk|chillebesk|halay|türkü|turku|türküleri|ilahi|kaside|fon\s*müziği|melodi|beat|feat\.?|ft\.?|mv|kpop|k-pop|aespa|sechskies|starakor|star\s*akor|akor|akorları|altyapı|alt\s*yapı)\b/i;
+
+    const knownMusicArtists =
+      /\b(tarkan|sezen\s*aksu|gülşen|gulsen|ebru\s*yaşar|ebru\s*yasar|derya\s*uluğ|derya\s*ulug|asil\s*gök|ferhat\s*göçer|ferhat\s*gocer|sertab\s*erener|candan\s*erçetin|bahadır\s*tatlıöz|reynmen|semicenk|burak\s*bulut|kurtuluş\s*kuş|tekir|mehmet\s*elmas|yıldırım\s*elmas|ahmet\s*kaya|ibrahim\s*tatlıses|müslüm\s*gürses|orhan\s*gencebay|barış\s*manço|cem\s*karaca|mabel\s*matiz|hadise|aleyna\s*tilki|simge|ziynet\s*sali|hande\s*yener|demet\s*akalı|mustafa\s*sandal|kenan\s*doğulu|yalın|teoman|duman|mor\s*ve\s*ötesi|manga|sagopa|ceza|ezhel|uzi|cakal|çakal|lvbel|blok3|poizi|wegh|dedublüman|melek\s*mosso|zeynep\s*bastık|melike\s*şahin|karsu|maya\s*perest|siyam|zeyd|gökhan\s*türkmen|emre\s*aydın|oğuzhan\s*koç|murat\s*boz|edis|buray|ilyas\s*yalçıntaş|tuğçe\s*kandemir|bilal\s*sonses|sancak|taladro|canfeza|no\.?\s*1|şehinşah|hidra|allame|contra|norm\s*ender|ben\s*fero|motive|ati242|girl\s*in\s*red|tate\s*mcrae|rose|giselle|sunghoon|serkan\s*nişancı|yiğit\s*mahzuni|afşin\s*akyol)\b/i;
+
+    if (cat === 1 || /[🎶🎵🎤🎧🎼]/.test(rawT) || musicPattern.test(combined) || knownMusicArtists.test(combined)) {
+      return { category: 1, bucket: 'music', keywords: ['muzik', 'müzik', 'music'] };
+    }
+
+    // 2. Podcast & Sohbet (-> YakTube Podcast & Sohbet)
+    const podcastPattern =
+      /\b(podcast|röportaj|roportaj|sohbet|söyleşi|soylesi|açık\s*mikrofon|konuk|bölüm\s*sohbet|talk\s*show|interview|in\s*your\s*dreams)\b/i;
+    if (podcastPattern.test(combined)) {
+      return { category: cat || 8, bucket: 'podcast', keywords: ['podcast', 'sohbet'] };
+    }
+
+    // 3. Teknoloji, Bilim & Eğitim (Categories 12, 13, 15 -> YakTube Teknoloji & Eğitim)
+    const techEduPattern =
+      /\b(teknoloji|technology|bilim|science|yazılım|software|kodlama|coding|programlama|linux|windows|android|ios|iphone|samsung|yapay\s*zeka|artificial\s*intelligence|chatgpt|gemini|bitcoin|kripto|crypto|blockchain|donanım|inceleme|review|rehber|tutorial|how\s*to|nasıl\s*yapılır|eğitim|egitim|education|educational|ders|lecture|kurs|matematik|fizik|kimya|ingilizce|english\s*listening|learn\s*english|qcomputing|quantum|developer|open\s*source|kde|ubuntu|debian|seo|search\s*console|marketing)\b/i;
+    if (cat === 12 || cat === 13 || cat === 15 || techEduPattern.test(combined)) {
+      return { category: cat || 13, bucket: 'tech', keywords: ['teknoloji', 'tekno', 'egitim', 'eğitim', 'tech'] };
+    }
+
+    // 4. Oyun, Spor & Araçlar (Categories 3, 5, 7 -> YakTube Oyun & Spor)
+    const gameSportPattern =
+      /\b(oyun|gaming|game|gameplay|walkthrough|playthrough|steam|playstation|xbox|nintendo|minecraft|valorant|csgo|cs2|pubg|gta|roblox|fortnite|league\s*of\s*legends|osu|twitch|spor|sport|sports|futbol|football|soccer|basketbol|voleybol|şampiyonlar\s*ligi|champions\s*league|galatasaray|fenerbahçe|fenerbahce|beşiktaş|besiktas|trabzonspor|man\s*utd|manchester|real\s*madrid|barcelona|maç\s*özeti|highlights|fitness|workout|gym|yoga|stretching|wwe|undertaker|red\s*bull|extreme\s*sports|araba|araç|aracı|otomobil|sürüş|multijet|gokart|go\s*kart|karting|motor|f1|formula\s*1)\b/i;
+    if (cat === 3 || cat === 5 || cat === 7 || gameSportPattern.test(combined)) {
+      return { category: cat || 5, bucket: 'game_sport', keywords: ['oyun', 'spor', 'game', 'sport'] };
+    }
+
+    // 5. Eğlence, Komedi, Film & Dizi (Categories 2, 9, 10 -> YakTube Eğlence & Dizi)
+    const entertainmentPattern =
+      /\b(komedi|comedy|mizah|komik|funny|skeç|skec|parodi|parodie|şaka|prank|eğlence|eglence|entertainment|film|movie|sinema|cinema|fragman|trailer|dizi|series|drama|episode|ep\.\s*\d+|bölüm|bolum|dramatizeme|kısa\s*film|short\s*film|animasyon|animation|anime|çizgi\s*film|tiyatro|stand\s*up|dans|dance|koreografi|choreography|tiktok\s*compilation|challenge|show)\b/i;
+    if (cat === 2 || cat === 9 || cat === 10 || entertainmentPattern.test(combined)) {
+      return { category: cat || 10, bucket: 'entertainment', keywords: ['eglence', 'eğlence', 'dizi', 'komedi'] };
+    }
+
+    // 6. Haber, Gündem, Gezi, Doğa & Yaşam (Categories 4, 6, 8, 11, 14, 16, 17, 18 -> YakTube Haber & Yaşam)
+    const newsLifePattern =
+      /\b(haber|haberler|gazete|gazetesi|news|gündem|siyaset|politika|ekonomi|belgesel|documentary|gezi|seyahat|travel|vlog|doğa|doga|nature|kamp|hayvan|animal|kedi|cat|köpek|dog|yemek|mutfak|tarif|food|cooking|moda|fashion|style|outfit|wear|trend|alışveriş|haul|yaşam|lifestyle|sağlık|health|çocuk|kids|sanat|art)\b/i;
+    if ([4, 6, 11, 14, 16, 17, 18].includes(cat) || newsLifePattern.test(combined) || newsLifePattern.test(fullText)) {
+      return { category: cat || 8, bucket: 'news_life', keywords: ['yasam', 'yaşam', 'haber', 'gezi'] };
+    }
+
+    // 7. Artist - Song fallback for "Artist - Song Title" format
+    if (/^[^\-|]{2,35}\s*[\-\u2010-\u2015]\s*[^\-|]{2,60}$/.test(rawT.trim())) {
+      return { category: 1, bucket: 'music', keywords: ['muzik', 'müzik', 'music'] };
+    }
+
+    return { category: cat || 8, bucket: 'general', keywords: ['genel', 'general', 'main'] };
+  }
+
+  async function loadOfficialChannels() {
+    const allAdminChannels = await dbQuery(
+      `SELECT vc.id, vc.name, act."preferredUsername" AS handle, a.name AS "accountName", u.id AS "userId"
+       FROM "videoChannel" vc
+       INNER JOIN "actor" act ON act."videoChannelId" = vc.id
+       INNER JOIN "account" a ON vc."accountId" = a.id
+       INNER JOIN "user" u ON a."userId" = u.id
+       WHERE u.role = 0 AND act."serverId" IS NULL
+       ORDER BY vc.id ASC`
+    );
+    const yaktubeChannels = allAdminChannels.filter(
+      c =>
+        (c.accountName && c.accountName.toLowerCase() === 'yaktube') ||
+        (c.handle && c.handle.toLowerCase().startsWith('yaktube_')) ||
+        Number(c.userId) === 1
+    );
+    return yaktubeChannels.length > 0 ? yaktubeChannels : allAdminChannels;
+  }
+
+  function pickChannelIdFromList(channels, decision) {
+    if (!channels || channels.length === 0) return '1';
+    for (const kw of decision.keywords || []) {
+      const found = channels.find(
+        c =>
+          (c.handle && c.handle.toLocaleLowerCase('tr').includes(kw)) ||
+          (c.name && c.name.toLocaleLowerCase('tr').includes(kw))
+      );
+      if (found) return String(found.id);
+    }
+    const genel =
+      channels.find(
+        c =>
+          (c.handle && c.handle.toLowerCase().includes('genel')) ||
+          (c.name && c.name.toLocaleLowerCase('tr').includes('genel'))
+      ) || channels[0];
+    return String(genel.id);
+  }
+
   // Universal Channel Resolver (Works on any PeerTube instance + smart category mapping)
   async function resolveTargetChannelId(title, explicitChannelId) {
     if (explicitChannelId) return String(explicitChannelId);
     if (customChannelId) return String(customChannelId);
 
     try {
-      const channels = await dbQuery(
-        `SELECT vc.id, vc.name, a."displayName"
-         FROM "videoChannel" vc
-         INNER JOIN "account" a ON vc."accountId" = a.id
-         INNER JOIN "user" u ON a."userId" = u.id
-         WHERE u.role = 0
-         ORDER BY vc.id ASC`
-      );
-
+      const channels = await loadOfficialChannels();
       if (channels.length > 0) {
-        const t = String(title || '').toLowerCase();
-        const findCh = keyword =>
-          channels.find(
-            c =>
-              (c.name && c.name.toLowerCase().includes(keyword)) ||
-              (c.displayName && c.displayName.toLowerCase().includes(keyword))
-          );
-
-        if (
-          t.includes('podcast') ||
-          t.includes('röportaj') ||
-          t.includes('roportaj') ||
-          t.includes('sohbet') ||
-          t.includes('bölüm') ||
-          t.includes('episode')
-        ) {
-          const podCh = findCh('podcast') || findCh('sohbet');
-          if (podCh) return String(podCh.id);
-        }
-
-        if (
-          t.includes('bitcoin') ||
-          t.includes('kripto') ||
-          t.includes('yazılım') ||
-          t.includes('kodlama') ||
-          t.includes('ders') ||
-          t.includes('rehber') ||
-          t.includes('tutorial') ||
-          t.includes('teknoloji') ||
-          t.includes('inceleme')
-        ) {
-          const techCh = findCh('tekno') || findCh('tech') || findCh('egitim');
-          if (techCh) return String(techCh.id);
-        }
-
-        if (
-          t.includes('müzik') ||
-          t.includes('muzik') ||
-          t.includes('music') ||
-          t.includes('şarkı') ||
-          t.includes('klip') ||
-          t.includes('official') ||
-          t.includes('feat') ||
-          t.includes('remix') ||
-          t.includes(' - ')
-        ) {
-          const musicCh = findCh('muzik') || findCh('müzik') || findCh('music');
-          if (musicCh) return String(musicCh.id);
-        }
-
-        return String(channels[0].id);
+        const decision = classifyVideoCategoryAndChannel(title, null, [], '');
+        return pickChannelIdFromList(channels, decision);
       }
-    } catch (e) {}
+    } catch (e) {
+      if (logger) logger.warn('[YakTube OnDemand] resolveTargetChannelId warning: ' + e.message);
+    }
 
     return '1';
+  }
+
+  // Post-import synchronizer: once yt-dlp populates a video's YouTube category & tags, ensure it is in the right channel
+  async function syncVideoChannelAndCategory(videoId) {
+    if (!videoId || customChannelId) return;
+    try {
+      const rows = await dbQuery(
+        `SELECT v.id, v.name, v.category, v."channelId", v.description,
+                (SELECT array_agg(t.name) FROM "videoTag" vt INNER JOIN "tag" t ON t.id = vt."tagId" WHERE vt."videoId" = v.id) AS tags
+         FROM "video" v
+         WHERE v.id = $1 AND v.remote = false
+         LIMIT 1`,
+        [Number(videoId)]
+      );
+      if (rows.length === 0) return;
+      const v = rows[0];
+      const channels = await loadOfficialChannels();
+      if (channels.length === 0) return;
+
+      const decision = classifyVideoCategoryAndChannel(v.name, v.category, v.tags, v.description);
+      const targetChannelId = Number(pickChannelIdFromList(channels, decision));
+      const targetCategory = decision.category || v.category || 8;
+
+      if (
+        (targetChannelId && targetChannelId !== Number(v.channelId) && Number(v.channelId) === 1) ||
+        (!v.category && targetCategory)
+      ) {
+        await dbQuery(
+          `UPDATE "video"
+           SET "channelId" = $1,
+               category = COALESCE(category, $2)
+           WHERE id = $3`,
+          [targetChannelId || v.channelId, targetCategory, v.id]
+        );
+      }
+    } catch (e) {}
   }
 
   // Helper to check if request is from an authenticated PeerTube user
@@ -2632,6 +2717,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
               try {
                 const data = JSON.parse(body);
                 if (data && data.video) {
+                  syncVideoChannelAndCategory(data.video.id).catch(() => {});
                   return resolve({
                     status: 200,
                     payload: {
@@ -2722,6 +2808,10 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
             const hasFiles =
               (video.files && video.files.length > 0) ||
               (video.streamingPlaylists && video.streamingPlaylists.length > 0);
+
+            if ((isPublished || isTranscoding) && video.id) {
+              await syncVideoChannelAndCategory(video.id);
+            }
 
             let errorMessage = null;
             if (isFailed && video.id) {
