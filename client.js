@@ -7071,10 +7071,12 @@ try {
 
       var uuid = match[1];
       var existingPanel = document.getElementById('yaktube-watch-comments-panel');
-      if (uuid === lastWatchUuid && existingPanel) {
-        var nativeComments = document.querySelector('my-video-comments, .video-comments, .comments-block, #comments');
-        if (nativeComments && existingPanel.previousElementSibling !== nativeComments) {
-          nativeComments.insertAdjacentElement('afterend', existingPanel);
+      if (uuid === lastWatchUuid) {
+        if (existingPanel) {
+          var nativeComments = document.querySelector('my-video-comments, .video-comments, .comments-block, #comments');
+          if (nativeComments && existingPanel.previousElementSibling !== nativeComments) {
+            nativeComments.insertAdjacentElement('afterend', existingPanel);
+          }
         }
         return;
       }

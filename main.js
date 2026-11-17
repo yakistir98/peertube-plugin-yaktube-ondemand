@@ -835,8 +835,15 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
   }
   parsedHomeCategories = parseHomeCategories(rawHomeCategories);
 
-  async function loadPluginSettings() {
+  let lastSettingsLoadTime = 0;
+  const SETTINGS_CACHE_TTL_MS = 60 * 1000;
+
+  async function loadPluginSettings(force = false) {
     if (!settingsManager || typeof settingsManager.getSetting !== 'function') return;
+    if (!force && lastSettingsLoadTime > 0 && Date.now() - lastSettingsLoadTime < SETTINGS_CACHE_TTL_MS) {
+      return;
+    }
+    lastSettingsLoadTime = Date.now();
     try {
       const val = await settingsManager.getSetting('guest-import-limit');
       if (val !== undefined && val !== null && String(val).trim() !== '') {
@@ -928,9 +935,9 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     } catch (e) {}
   }
 
-  await loadPluginSettings();
+  await loadPluginSettings(true);
   if (settingsManager && typeof settingsManager.onSettingsChange === 'function') {
-    settingsManager.onSettingsChange(loadPluginSettings);
+    settingsManager.onSettingsChange(() => loadPluginSettings(true));
   }
   resolveYtDlpPath(logger, customYtDlpPath, peertubeHelpers);
 
@@ -1759,6 +1766,38 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     return false;
   }
 
+  let localLibrarySnapshotCache = { time: 0, rows: [] };
+  const LOCAL_LIBRARY_CACHE_TTL_MS = 30 * 1000;
+
+  async function getCachedLocalLibraryRows() {
+    if (
+      localLibrarySnapshotCache.rows.length > 0 &&
+      Date.now() - localLibrarySnapshotCache.time < LOCAL_LIBRARY_CACHE_TTL_MS
+    ) {
+      return localLibrarySnapshotCache.rows;
+    }
+    const rows = await dbQuery(
+      `SELECT v.id, v.uuid, v.name, v.category, v.duration, v.views, v."createdAt",
+              (SELECT t.filename FROM "thumbnail" t WHERE t."videoId" = v.id ORDER BY t.width ASC NULLS LAST LIMIT 1) AS "thumbFilename",
+              vi."targetUrl" AS "importUrl",
+              (
+                SELECT tg.name
+                FROM "videoTag" vt2
+                INNER JOIN "tag" tg ON tg.id = vt2."tagId"
+                WHERE vt2."videoId" = v.id
+                ORDER BY vt2."createdAt" ASC
+                LIMIT 1
+              ) AS "primaryTag"
+       FROM "video" v
+       LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+       WHERE v.remote = false AND v.state = 1
+       ORDER BY v.id DESC
+       LIMIT 250`
+    );
+    localLibrarySnapshotCache = { time: Date.now(), rows };
+    return rows;
+  }
+
   router.get('/smart-recommendations', async (req, res) => {
     await loadPluginSettings();
     if (isCrawlerBotRequest(req)) {
@@ -1798,14 +1837,26 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
     if (resolvedUuid) {
       try {
-        const currentRows = await dbQuery(
-          `SELECT v.id, v.uuid, v.name, v.category, v."channelId", vi."targetUrl"
-           FROM "video" v
-           LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
-           WHERE v.uuid::text = $1 OR v.id::text = $2
-           LIMIT 1`,
-          [resolvedUuid, rawUuid]
-        );
+        let currentRows = [];
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedUuid)) {
+          currentRows = await dbQuery(
+            `SELECT v.id, v.uuid, v.name, v.category, v."channelId", vi."targetUrl"
+             FROM "video" v
+             LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+             WHERE v.uuid = $1::uuid
+             LIMIT 1`,
+            [resolvedUuid]
+          );
+        } else if (/^\d+$/.test(rawUuid)) {
+          currentRows = await dbQuery(
+            `SELECT v.id, v.uuid, v.name, v.category, v."channelId", vi."targetUrl"
+             FROM "video" v
+             LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+             WHERE v.id = $1::int
+             LIMIT 1`,
+            [parseInt(rawUuid, 10)]
+          );
+        }
         if (currentRows.length > 0) {
           currentVideoRow = currentRows[0];
           const tagRows = await dbQuery(
@@ -1813,7 +1864,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
              FROM "videoTag" vt
              INNER JOIN "tag" t ON t.id = vt."tagId"
              WHERE vt."videoId" = $1
-             ORDER BY vt.id ASC
+             ORDER BY vt."createdAt" ASC
              LIMIT 8`,
             [currentVideoRow.id]
           );
@@ -2059,26 +2110,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     let hasDirectLocalMatch = false;
 
     try {
-      const localRows = await dbQuery(
-        `SELECT DISTINCT ON (v.id)
-           v.id, v.uuid, v.name, v.category, v.duration, v.views, v."createdAt",
-           t.filename AS "thumbFilename",
-           vi."targetUrl" AS "importUrl",
-           (
-             SELECT tg.name
-             FROM "videoTag" vt2
-             INNER JOIN "tag" tg ON tg.id = vt2."tagId"
-             WHERE vt2."videoId" = v.id
-             ORDER BY vt2.id ASC
-             LIMIT 1
-           ) AS "primaryTag"
-         FROM "video" v
-         LEFT JOIN "thumbnail" t ON t."videoId" = v.id
-         LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
-         WHERE v.remote = false AND v.state = 1
-         ORDER BY v.id DESC, t.type ASC
-         LIMIT 250`
-      );
+      const localRows = await getCachedLocalLibraryRows();
 
       for (const lv of localRows) {
         if (!lv || !lv.name) continue;
@@ -2217,7 +2249,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     // 1.5. Score Relevant Fediverse (Remote PeerTube) Videos when federatedRecommendationsMode !== 'disabled'
     if (federatedRecommendationsMode !== 'disabled') {
       try {
-        const searchPatterns = Array.from(
+        const trgmPatterns = Array.from(
           new Set(
             [
               ...(artistNorm && artistNorm.length >= 3 ? [artistNorm] : []),
@@ -2225,27 +2257,35 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
               ...currentKeywords,
               ...historyKeywords
             ]
+              .map(k =>
+                String(k || '')
+                  .toLowerCase()
+                  .replace(/[ç]/g, 'c')
+                  .replace(/[ğ]/g, 'g')
+                  .replace(/[ıİ]/g, 'i')
+                  .replace(/[ö]/g, 'o')
+                  .replace(/[ş]/g, 's')
+                  .replace(/[ü]/g, 'u')
+                  .trim()
+              )
               .filter(k => k && k.length >= 3)
-              .slice(0, 8)
+              .slice(0, 6)
               .map(k => `%${k}%`)
           )
         );
 
-        if (searchPatterns.length > 0) {
+        if (trgmPatterns.length > 0) {
           const fedRows = await dbQuery(
-            `SELECT DISTINCT ON (v.id)
-               v.id, v.uuid, v.name, v.category, v.language, v.duration, v.views, v."isLive", v.nsfw,
-               t.filename AS "thumbFilename"
+            `SELECT v.id, v.uuid, v.name, v.category, v.language, v.duration, v.views, v."isLive", v.nsfw,
+                    (SELECT t.filename FROM "thumbnail" t WHERE t."videoId" = v.id ORDER BY t.width ASC NULLS LAST LIMIT 1) AS "thumbFilename"
              FROM "video" v
-             LEFT JOIN "thumbnail" t ON t."videoId" = v.id
              WHERE v.remote = true
                AND v.state = 1
                AND v.privacy = 1
                AND v.nsfw = false
-               AND (v.name ILIKE ANY($1) OR v.language = 'tr')
-             ORDER BY v.id DESC, t.type ASC
-             LIMIT 80`,
-            [searchPatterns]
+               AND lower(immutable_unaccent(v.name::text)) LIKE ANY($1)
+             LIMIT 40`,
+            [trgmPatterns]
           );
 
           for (const fv of fedRows) {
@@ -2817,6 +2857,9 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
 
   // 4. Video Import Status Polling Route
   router.get('/status/:id', async (req, res) => {
+    if (isCrawlerBotRequest(req)) {
+      return res.status(403).json({ error: 'Bot requests are not allowed on import status endpoint' });
+    }
     const videoId = req.params.id;
     const { hostname, port, hostHeader } = getLocalServerTarget();
     const reqVideo = http.request(
@@ -2938,21 +2981,47 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     }
   }
 
+  const videoOriginCache = new Map();
+  const VIDEO_ORIGIN_CACHE_TTL_MS = 10 * 60 * 1000;
+
   router.get('/video-origin/:uuid', async (req, res) => {
+    if (isCrawlerBotRequest(req)) {
+      return res.json({ ok: false, hasYouTubeOrigin: false, botIgnored: true });
+    }
     const rawParam = (req.params.uuid || '').trim();
     if (!rawParam) return res.status(400).json({ error: 'UUID required' });
     const resolvedUuid = shortToUuid(rawParam);
 
+    const cacheHit = videoOriginCache.get(resolvedUuid);
+    if (cacheHit && Date.now() - cacheHit.time < VIDEO_ORIGIN_CACHE_TTL_MS) {
+      if (cacheHit.notFound) return res.status(404).json({ error: 'Video not found' });
+      return res.json(cacheHit.payload);
+    }
+
     try {
-      const rows = await dbQuery(
-        `SELECT v.id, v.uuid, v.name, v.description, vi."targetUrl"
-         FROM "video" v
-         LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
-         WHERE v.uuid::text = $1 OR v.id::text = $2
-         LIMIT 1`,
-        [resolvedUuid, rawParam]
-      );
+      let rows = [];
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedUuid)) {
+        rows = await dbQuery(
+          `SELECT v.id, v.uuid, v.name, v.description, vi."targetUrl"
+           FROM "video" v
+           LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+           WHERE v.uuid = $1::uuid
+           LIMIT 1`,
+          [resolvedUuid]
+        );
+      } else if (/^\d+$/.test(rawParam)) {
+        rows = await dbQuery(
+          `SELECT v.id, v.uuid, v.name, v.description, vi."targetUrl"
+           FROM "video" v
+           LEFT JOIN "videoImport" vi ON vi."videoId" = v.id
+           WHERE v.id = $1::int
+           LIMIT 1`,
+          [parseInt(rawParam, 10)]
+        );
+      }
       if (rows.length === 0) {
+        if (videoOriginCache.size > 2000) videoOriginCache.clear();
+        videoOriginCache.set(resolvedUuid, { time: Date.now(), notFound: true });
         return res.status(404).json({ error: 'Video not found' });
       }
 
@@ -2975,13 +3044,17 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         if (match) youtubeId = match[1];
       }
 
-      return res.json({
+      const payload = {
         ok: true,
         hasYouTubeOrigin: !!youtubeId,
         youtubeId: youtubeId || null,
         targetUrl: row.targetUrl || null,
         title: row.name
-      });
+      };
+      if (videoOriginCache.size > 2000) videoOriginCache.clear();
+      videoOriginCache.set(resolvedUuid, { time: Date.now(), notFound: false, payload });
+
+      return res.json(payload);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
