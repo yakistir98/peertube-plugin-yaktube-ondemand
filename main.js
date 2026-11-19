@@ -1483,24 +1483,30 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
     return res.json(result);
   });
 
-  // Reusable YouTube Raw Search Helper (with Cache & SafeSearch)
+  const inFlightYouTubeSearches = new Map();
+
+  // Reusable YouTube Raw Search Helper (with Cache, In-Flight Dedupe & SafeSearch)
   function searchYouTubeRaw(query, maxCount = 24) {
-    return new Promise((resolve, reject) => {
-      const cleanQ = (query || '').trim();
-      if (!cleanQ || cleanQ.length < 2) return resolve({ results: [], cached: false });
-      if (safeSearchEnabled && isContentBlocked(cleanQ, blockedKeywordsList)) {
-        return resolve({ results: [], cached: false, blocked: true });
-      }
+    const cleanQ = (query || '').trim();
+    if (!cleanQ || cleanQ.length < 2) return Promise.resolve({ results: [], cached: false });
+    if (safeSearchEnabled && isContentBlocked(cleanQ, blockedKeywordsList)) {
+      return Promise.resolve({ results: [], cached: false, blocked: true });
+    }
 
-      const cacheKey = `${cleanQ.toLocaleLowerCase('tr')}__${maxCount}`;
-      const cached = getCached(cacheKey) || (maxCount <= 24 ? getCached(cleanQ) : null);
-      if (cached) {
-        const filteredCached = safeSearchEnabled
-          ? cached.filter(e => !isContentBlocked(e.title, blockedKeywordsList))
-          : cached;
-        return resolve({ results: filteredCached.slice(0, maxCount), cached: true });
-      }
+    const cacheKey = `${cleanQ.toLocaleLowerCase('tr')}__${maxCount}`;
+    const cached = getCached(cacheKey) || (maxCount <= 24 ? getCached(cleanQ) : null);
+    if (cached) {
+      const filteredCached = safeSearchEnabled
+        ? cached.filter(e => !isContentBlocked(e.title, blockedKeywordsList))
+        : cached;
+      return Promise.resolve({ results: filteredCached.slice(0, maxCount), cached: true });
+    }
 
+    if (inFlightYouTubeSearches.has(cacheKey)) {
+      return inFlightYouTubeSearches.get(cacheKey);
+    }
+
+    const p = new Promise((resolve, reject) => {
       const ytdlpPath = resolveYtDlpPath(logger, customYtDlpPath, peertubeHelpers);
       const args = [
         `ytsearch${maxCount}:${cleanQ}`,
@@ -1510,8 +1516,13 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
         '--no-warnings'
       ];
 
-      execFile(ytdlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 15000 }, (error, stdout) => {
+      execFile(ytdlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 30000 }, (error, stdout, stderr) => {
         if (error) {
+          if (logger) {
+            logger.warn(
+              `[YakTube Search] yt-dlp search error for "${cleanQ}": ${error.message} ${stderr || ''}`.trim()
+            );
+          }
           return reject(error);
         }
         try {
@@ -1562,7 +1573,12 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
           return reject(parseErr);
         }
       });
+    }).finally(() => {
+      inFlightYouTubeSearches.delete(cacheKey);
     });
+
+    inFlightYouTubeSearches.set(cacheKey, p);
+    return p;
   }
 
   function isCrawlerBotRequest(req) {
@@ -1639,7 +1655,7 @@ async function register({ registerHook, getRouter, registerSetting, settingsMana
       return res.json({ results: enrichedResults, cached, guestImportLimit });
     } catch (err) {
       if (logger) logger.error('YouTube search error: ' + err.message);
-      return res.status(500).json({ error: 'Search failed', details: err.message });
+      return res.json({ results: [], searchError: true, errorDetails: err.message, guestImportLimit });
     }
   }
 

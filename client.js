@@ -4465,26 +4465,400 @@ try {
       var container = document.getElementById('yaktube-ondemand-container');
       var nativeResults = searchMount.querySelector('.search-result');
 
-      if (queryKey === lastQueryKey) {
-        if (container && container.parentElement !== searchMount) {
-          searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
+      function ensureSearchContainerMounted() {
+        var curSearchMount = document.querySelector('my-search, my-search-results') || searchMount;
+        var curNative = curSearchMount ? curSearchMount.querySelector('.search-result') : null;
+        var el = document.getElementById('yaktube-ondemand-container');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'yaktube-ondemand-container';
+          el.className = 'yaktube-ondemand-section';
+          el.setAttribute('role', 'region');
+          el.setAttribute('aria-label', 'Canlı YouTube ve ' + getInstanceName() + ' Arama Sonuçları');
         }
-        ensureFediverseBridge(query, currentSearchTarget);
-        return;
+        if (curSearchMount && el.parentElement !== curSearchMount) {
+          curSearchMount.insertBefore(el, curNative || curSearchMount.firstChild);
+        }
+        return el;
+      }
+
+      function renderSearchOutcome(ytData, localData, activeContainer) {
+        var targetContainer = activeContainer || ensureSearchContainerMounted();
+        ytData = ytData || {};
+        localData = localData || {};
+
+        if (typeof ytData.guestImportLimit === 'number') {
+          cachedGuestImportLimit = ytData.guestImportLimit;
+        }
+
+        if (ytData && ytData.blocked) {
+          var safetyMsg =
+            ytData.message ||
+            'Bu arama terimi veya içerik, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince filtrelenmiştir.';
+          targetContainer.innerHTML =
+            '<div class="yaktube-header" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.08); padding: 18px 20px; border-radius: 8px; margin-bottom: 24px;">' +
+            '<div class="yaktube-header-left">' +
+            '<span class="yaktube-badge" style="background:#ef4444; color:#fff; font-weight:700;">🛡️ Çocuk ve Aile Güvenliği Koruması</span>' +
+            '<h2 class="yaktube-title-h3" style="margin:8px 0 4px; font-size:1.15rem; color:#f87171;">Arama Filtrelendi</h2>' +
+            '<p style="margin:0; font-size:0.95rem; color:#cbd5e1;">' +
+            escapeHtml(safetyMsg) +
+            '</p>' +
+            '</div>' +
+            '</div>';
+          announce(safetyMsg, true);
+          return;
+        }
+
+        var rawYtResults = ytData.results || [];
+        var uniqueYtResults = [];
+        var seenIds = {};
+
+        rawYtResults.forEach(function (item) {
+          if (item && item.id && !seenIds[item.id] && item.title) {
+            seenIds[item.id] = true;
+            uniqueYtResults.push(item);
+          }
+        });
+
+        var ytCount = uniqueYtResults.length;
+        var localResults = localData.data || [];
+        var localTotal = typeof localData.total === 'number' ? localData.total : localResults.length;
+
+        if (ytCount === 0 && localResults.length === 0) {
+          var emptyTitle = ytData.searchError
+            ? 'YouTube bağlantısı geçici olarak zaman aşımına uğradı'
+            : '"' + escapeHtml(query) + '" için Sonuç Bulunamadı';
+          var retryHtml = ytData.searchError
+            ? '<div style="padding:14px 0;"><button type="button" id="yaktube-retry-search-btn" class="yaktube-shortcuts-btn" style="background:#ff8f37;color:#000;border:none;font-weight:700;">🔄 YouTube Aramasını Tekrar Dene</button></div>'
+            : '';
+          targetContainer.innerHTML =
+            '<div class="yaktube-header">' +
+            '<div class="yaktube-header-left">' +
+            '<span class="yaktube-badge">⚡ Canlı YouTube & Web Arama</span>' +
+            '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">' +
+            emptyTitle +
+            '</h2>' +
+            '</div>' +
+            '<button class="yaktube-shortcuts-btn" id="yaktube-open-shortcuts" aria-label="Klavye Kısayolları Kılavuzunu Aç">' +
+            '⌨️ Kısayollar (?)' +
+            '</button>' +
+            '</div>' +
+            retryHtml;
+          var rBtn = document.getElementById('yaktube-retry-search-btn');
+          if (rBtn) {
+            rBtn.addEventListener('click', function () {
+              window.__yaktube_last_search_snapshot__ = null;
+              lastQuery = null;
+              checkAndInjectSearchResults();
+            });
+          }
+          var scBtn = document.getElementById('yaktube-open-shortcuts');
+          if (scBtn) scBtn.addEventListener('click', toggleShortcutsModal);
+          announce(
+            ytData.searchError
+              ? 'YouTube bağlantısı geçici olarak yanıt vermedi.'
+              : query + ' için eşleşen video bulunamadı.'
+          );
+          return;
+        }
+
+        var visibleYtCount = Math.min(12, ytCount);
+
+        function renderAll() {
+          var ytHeaderHtml = '';
+          var ytCardsHtml = '';
+          var ytLoadMoreHtml = '';
+
+          if (ytCount > 0) {
+            var countText = ytCount === 1 ? '1 Video Bulundu' : ytCount + ' Video Bulundu';
+            ytHeaderHtml =
+              '<div class="yaktube-header">' +
+              '<div class="yaktube-header-left">' +
+              '<span class="yaktube-badge">⚡ Canlı YouTube & Web Arama</span>' +
+              '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">"' +
+              escapeHtml(query) +
+              '" için ' +
+              countText +
+              '</h2>' +
+              '</div>' +
+              '<button class="yaktube-shortcuts-btn" id="yaktube-open-shortcuts" aria-label="Klavye Kısayolları Kılavuzunu Aç">' +
+              '⌨️ Kısayollar (?)' +
+              '</button>' +
+              '</div>';
+
+            var visibleResults = uniqueYtResults.slice(0, visibleYtCount);
+            visibleResults.forEach(function (item) {
+              if (item && item.title && item.channel) {
+                saveVideoChannelMeta(
+                  item.title,
+                  item.channel,
+                  item.id || '',
+                  (item.localVideo && item.localVideo.uuid) || ''
+                );
+              }
+              var isLocal = !!item.isDownloaded;
+              var isLive = !!item.isLive;
+
+              var statusBadge = '';
+              if (isLive) {
+                statusBadge =
+                  '<span class="yaktube-badge" style="background: #dc2626; color: #fff; margin-bottom: 6px; display: inline-block; font-weight: 700;">🔴 CANLI YAYIN</span>';
+              } else if (isLocal) {
+                statusBadge =
+                  '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' +
+                  escapeHtml(getInstanceName()) +
+                  "'da Mevcut</span>";
+              }
+
+              var actionButton = '';
+              if (isLive) {
+                actionButton =
+                  '<button class="yaktube-live-btn" data-url="' +
+                  escapeHtml(item.url) +
+                  '" data-title="' +
+                  escapeHtml(item.title) +
+                  '" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" aria-label="' +
+                  escapeHtml(item.title) +
+                  ' canlı yayınını hemen izle">🔴 Canlı Yayını İzle</button>';
+              } else if (isLocal && item.localVideo && item.localVideo.url) {
+                actionButton =
+                  '<a href="' +
+                  escapeHtml(item.localVideo.url) +
+                  '" class="yaktube-play-btn" aria-label="' +
+                  escapeHtml(item.title) +
+                  ' videosunu ' +
+                  escapeHtml(getInstanceName()) +
+                  '\'dan hemen izle">▶️ ' +
+                  escapeHtml(getInstanceName()) +
+                  "'dan İzle</a>";
+              } else {
+                actionButton =
+                  '<button class="yaktube-import-btn" data-url="' +
+                  escapeHtml(item.url) +
+                  '" data-title="' +
+                  escapeHtml(item.title) +
+                  '" aria-label="' +
+                  escapeHtml(item.title) +
+                  ' videosunu ' +
+                  escapeHtml(getInstanceName()) +
+                  '\'a aktar ve izle">📥 ' +
+                  escapeHtml(getInstanceName()) +
+                  "'a Aktar & İzle</button>";
+              }
+
+              var durationText = isLive ? 'CANLI' : item.durationFormatted || formatClockTime(item.duration);
+              var cardLabel =
+                item.title +
+                (isLive ? ' (Canlı Yayın)' : isLocal ? ' (' + getInstanceName() + ' kütüphanenizde mevcut)' : '') +
+                ', ' +
+                item.channel +
+                ' kanalı, Süre: ' +
+                durationText;
+
+              ytCardsHtml +=
+                '<div class="yaktube-card" role="article" tabindex="0" aria-label="' +
+                escapeHtml(cardLabel) +
+                '">' +
+                '<div class="yaktube-thumb-wrap">' +
+                '<img class="yaktube-thumb-img" src="' +
+                escapeHtml(item.thumbnail) +
+                '" alt="' +
+                escapeHtml(item.title) +
+                '" loading="lazy" />' +
+                '<span class="yaktube-duration-badge" style="' +
+                (isLive ? 'background:#dc2626;font-weight:700;' : '') +
+                '" aria-label="Süre">' +
+                escapeHtml(durationText) +
+                '</span>' +
+                '</div>' +
+                '<div class="yaktube-info">' +
+                '<div>' +
+                statusBadge +
+                '<h3 class="yaktube-video-name" title="' +
+                escapeHtml(item.title) +
+                '" style="margin:0; font-size:13px; font-weight:600; line-height:1.35;">' +
+                escapeHtml(item.title) +
+                '</h3>' +
+                '<div class="yaktube-channel-name">' +
+                escapeHtml(item.channel) +
+                '</div>' +
+                '</div>' +
+                actionButton +
+                '</div>' +
+                '</div>';
+            });
+
+            if (visibleYtCount < ytCount) {
+              ytLoadMoreHtml =
+                '<div style="text-align: center; margin: 20px 0 10px 0;">' +
+                '<button id="yaktube-load-more-btn" class="yaktube-load-more-btn" style="background: #1e293b; color: #ff8f37; border: 1px solid #ff8f37; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" aria-label="Daha fazla video yükle">' +
+                '➕ Daha Fazla Video Göster (' +
+                visibleYtCount +
+                ' / ' +
+                ytCount +
+                ')' +
+                '</button>' +
+                '</div>';
+            }
+          }
+
+          var localShelfHtml = '';
+          if (localResults.length > 0) {
+            var localCardsHtml = '';
+            localResults.forEach(function (lItem) {
+              var lThumb =
+                lItem.thumbnailPath ||
+                (lItem.thumbnails && lItem.thumbnails[0]
+                  ? lItem.thumbnails[0].fileUrl
+                  : '/client/assets/images/default-thumbnail.jpg');
+              var lDuration = formatClockTime(lItem.duration);
+              var lChannel =
+                (lItem.channel && (lItem.channel.displayName || lItem.channel.name)) ||
+                (lItem.account && (lItem.account.displayName || lItem.account.name)) ||
+                getInstanceName();
+              var lWatchUrl = lItem.url || '/videos/watch/' + (lItem.shortUUID || lItem.uuid);
+              var lViews = (lItem.views || 0) + ' görüntüleme';
+              var lLabel =
+                lItem.name +
+                ', ' +
+                lChannel +
+                ', ' +
+                getInstanceName() +
+                ' yerel sunucusunda mevcut, Süre: ' +
+                lDuration;
+
+              localCardsHtml +=
+                '<div class="yaktube-card yaktube-local-card" role="article" tabindex="0" aria-label="' +
+                escapeHtml(lLabel) +
+                '">' +
+                '<a href="' +
+                escapeHtml(lWatchUrl) +
+                '" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%;">' +
+                '<div class="yaktube-thumb-wrap">' +
+                '<img class="yaktube-thumb-img" src="' +
+                escapeHtml(lThumb) +
+                '" alt="' +
+                escapeHtml(lItem.name) +
+                '" loading="lazy" onerror="this.src=\'/client/assets/images/default-thumbnail.jpg\'" />' +
+                '<span class="yaktube-duration-badge" aria-label="Süre">' +
+                escapeHtml(lDuration) +
+                '</span>' +
+                '</div>' +
+                '<div class="yaktube-info">' +
+                '<div>' +
+                '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' +
+                escapeHtml(getInstanceName()) +
+                "'da Mevcut</span>" +
+                '<h3 class="yaktube-video-name" title="' +
+                escapeHtml(lItem.name) +
+                '" style="margin:0; font-size:13px; font-weight:600; line-height:1.35;">' +
+                escapeHtml(lItem.name) +
+                '</h3>' +
+                '<div class="yaktube-channel-name">' +
+                escapeHtml(lChannel) +
+                ' • ' +
+                escapeHtml(lViews) +
+                '</div>' +
+                '</div>' +
+                '<div class="yaktube-play-btn" style="margin-top:8px;">▶️ ' +
+                escapeHtml(getInstanceName()) +
+                "'dan Hemen İzle</div>" +
+                '</div>' +
+                '</a>' +
+                '</div>';
+            });
+
+            localShelfHtml =
+              '<div id="yaktube-local-shelf" class="yaktube-local-shelf" role="region" aria-label="' +
+              escapeHtml(getInstanceName()) +
+              ' Yerel Kütüphanesi">' +
+              '<div class="yaktube-header" style="margin-top: 24px; border-bottom-color: rgba(16, 185, 129, 0.3);">' +
+              '<div class="yaktube-header-left">' +
+              '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">✅ Yerel Kütüphane</span>' +
+              '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">"' +
+              escapeHtml(query) +
+              '" için ' +
+              escapeHtml(getInstanceName()) +
+              ' Sunucusunda ' +
+              localTotal +
+              ' Video Bulundu</h2>' +
+              '</div>' +
+              '<span class="yaktube-local-shelf-sub">Doğrudan sunucumuzda barındırılan, yüksek hızlı ve anında izlenebilen videolar</span>' +
+              '</div>' +
+              '<div class="yaktube-grid">' +
+              localCardsHtml +
+              '</div>' +
+              '</div>';
+          }
+
+          targetContainer.innerHTML =
+            ytHeaderHtml +
+            (ytCount > 0 ? '<div class="yaktube-grid">' + ytCardsHtml + '</div>' : '') +
+            ytLoadMoreHtml +
+            localShelfHtml;
+
+          var sBtn = document.getElementById('yaktube-open-shortcuts');
+          if (sBtn) {
+            sBtn.addEventListener('click', toggleShortcutsModal);
+          }
+
+          var loadMoreBtn = document.getElementById('yaktube-load-more-btn');
+          if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', function () {
+              visibleYtCount = Math.min(visibleYtCount + 6, ytCount);
+              renderAll();
+              announce(visibleYtCount + ' adet video gösteriliyor.');
+            });
+          }
+
+          targetContainer.querySelectorAll('.yaktube-live-btn').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+              var liveUrl = e.currentTarget.getAttribute('data-url');
+              var liveTitle = e.currentTarget.getAttribute('data-title');
+              handleLiveStream(liveUrl, liveTitle);
+            });
+          });
+
+          targetContainer.querySelectorAll('.yaktube-import-btn').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+              var videoUrl = e.currentTarget.getAttribute('data-url');
+              var videoTitle = e.currentTarget.getAttribute('data-title');
+              handleImport(videoUrl, e.currentTarget, videoTitle);
+            });
+          });
+        }
+
+        renderAll();
+      }
+
+      if (queryKey === lastQueryKey) {
+        if (container) {
+          if (container.parentElement !== searchMount) {
+            searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
+          }
+          ensureFediverseBridge(query, currentSearchTarget);
+          return;
+        }
+        // If Angular re-rendered <my-search> and wiped #yaktube-ondemand-container, restore instantly!
+        if (!isSearching) {
+          var snap = window.__yaktube_last_search_snapshot__;
+          if (snap && snap.key === queryKey) {
+            var restoredContainer = ensureSearchContainerMounted();
+            renderSearchOutcome(snap.ytData, snap.localData, restoredContainer);
+            ensureFediverseBridge(query, currentSearchTarget);
+            return;
+          }
+          lastQuery = null;
+          lastSearchTarget = null;
+        } else {
+          container = ensureSearchContainerMounted();
+          ensureFediverseBridge(query, currentSearchTarget);
+          return;
+        }
       }
       lastQuery = query;
       lastSearchTarget = currentSearchTarget;
-
-      if (!container) {
-        container = document.createElement('div');
-        container.id = 'yaktube-ondemand-container';
-        container.className = 'yaktube-ondemand-section';
-        container.setAttribute('role', 'region');
-        container.setAttribute('aria-label', 'Canlı YouTube ve ' + getInstanceName() + ' Arama Sonuçları');
-        searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
-      } else if (container.parentElement !== searchMount) {
-        searchMount.insertBefore(container, nativeResults || searchMount.firstChild);
-      }
+      container = ensureSearchContainerMounted();
 
       container.innerHTML =
         '<div class="yaktube-header">' +
@@ -4525,359 +4899,49 @@ try {
 
       Promise.all([
         fetchPluginJson('/youtube-search?q=' + encodeURIComponent(query), fetchOpts).catch(function (err) {
-          if (err && err.name === 'AbortError') return { results: [] };
+          if (err && err.name === 'AbortError') return { results: [], aborted: true };
           console.warn('[YakTube] YouTube search fetch error:', err);
-          return { results: [] };
+          return { results: [], searchError: true };
         }),
         fetch('/api/v1/search/videos?search=' + encodeURIComponent(query) + '&isLocal=true&count=12', fetchOpts)
           .then(function (res) {
             return res.json();
           })
           .catch(function (err) {
-            if (err && err.name === 'AbortError') return { total: 0, data: [] };
+            if (err && err.name === 'AbortError') return { total: 0, data: [], aborted: true };
             console.warn('[YakTube] Local videos search fetch error:', err);
             return { total: 0, data: [] };
           })
       ])
         .then(function (responses) {
+          if (abortCtrl && abortCtrl.signal && abortCtrl.signal.aborted) return;
           var ytData = responses[0] || {};
           var localData = responses[1] || {};
-          if (typeof ytData.guestImportLimit === 'number') {
-            cachedGuestImportLimit = ytData.guestImportLimit;
-          }
+          if (ytData.aborted || localData.aborted) return;
 
-          if (ytData && ytData.blocked) {
-            var safetyMsg =
-              ytData.message ||
-              'Bu arama terimi veya içerik, Çocuk ve Aile Güvenliği (Child & Family Safety) politikaları gereğince filtrelenmiştir.';
-            container.innerHTML =
-              '<div class="yaktube-header" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.08); padding: 18px 20px; border-radius: 8px; margin-bottom: 24px;">' +
-              '<div class="yaktube-header-left">' +
-              '<span class="yaktube-badge" style="background:#ef4444; color:#fff; font-weight:700;">🛡️ Çocuk ve Aile Güvenliği Koruması</span>' +
-              '<h2 class="yaktube-title-h3" style="margin:8px 0 4px; font-size:1.15rem; color:#f87171;">Arama Filtrelendi</h2>' +
-              '<p style="margin:0; font-size:0.95rem; color:#cbd5e1;">' +
-              escapeHtml(safetyMsg) +
-              '</p>' +
-              '</div>' +
-              '</div>';
-            announce(safetyMsg, true);
-            return;
-          }
+          window.__yaktube_last_search_snapshot__ = { key: queryKey, ytData: ytData, localData: localData };
+          var activeContainer = ensureSearchContainerMounted();
+          renderSearchOutcome(ytData, localData, activeContainer);
 
-          var rawYtResults = ytData.results || [];
-          var uniqueYtResults = [];
-          var seenIds = {};
-
-          rawYtResults.forEach(function (item) {
-            if (item && item.id && !seenIds[item.id] && item.title) {
-              seenIds[item.id] = true;
-              uniqueYtResults.push(item);
-            }
-          });
-
-          var ytCount = uniqueYtResults.length;
-          var localResults = localData.data || [];
-          var localTotal = typeof localData.total === 'number' ? localData.total : localResults.length;
-
-          if (ytCount === 0 && localResults.length === 0) {
-            container.innerHTML =
-              '<div class="yaktube-header">' +
-              '<div class="yaktube-header-left">' +
-              '<span class="yaktube-badge">⚡ Canlı YouTube & Web Arama</span>' +
-              '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">"' +
-              escapeHtml(query) +
-              '" için Sonuç Bulunamadı</h2>' +
-              '</div>' +
-              '<button class="yaktube-shortcuts-btn" id="yaktube-open-shortcuts" aria-label="Klavye Kısayolları Kılavuzunu Aç">' +
-              '⌨️ Kısayollar (?)' +
-              '</button>' +
-              '</div>';
-            announce(query + ' için YouTube veya yerel sunucuda eşleşen video bulunamadı.');
-          } else {
-            var visibleYtCount = Math.min(12, ytCount);
-
-            function renderAll() {
-              // 1. YouTube Section
-              var ytHeaderHtml = '';
-              var ytCardsHtml = '';
-              var ytLoadMoreHtml = '';
-
-              if (ytCount > 0) {
-                var countText = ytCount === 1 ? '1 Video Bulundu' : ytCount + ' Video Bulundu';
-                ytHeaderHtml =
-                  '<div class="yaktube-header">' +
-                  '<div class="yaktube-header-left">' +
-                  '<span class="yaktube-badge">⚡ Canlı YouTube & Web Arama</span>' +
-                  '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">"' +
-                  escapeHtml(query) +
-                  '" için ' +
-                  countText +
-                  '</h2>' +
-                  '</div>' +
-                  '<button class="yaktube-shortcuts-btn" id="yaktube-open-shortcuts" aria-label="Klavye Kısayolları Kılavuzunu Aç">' +
-                  '⌨️ Kısayollar (?)' +
-                  '</button>' +
-                  '</div>';
-
-                var visibleResults = uniqueYtResults.slice(0, visibleYtCount);
-                visibleResults.forEach(function (item) {
-                  if (item && item.title && item.channel) {
-                    saveVideoChannelMeta(
-                      item.title,
-                      item.channel,
-                      item.id || '',
-                      (item.localVideo && item.localVideo.uuid) || ''
-                    );
-                  }
-                  var isLocal = !!item.isDownloaded;
-                  var isLive = !!item.isLive;
-
-                  var statusBadge = '';
-                  if (isLive) {
-                    statusBadge =
-                      '<span class="yaktube-badge" style="background: #dc2626; color: #fff; margin-bottom: 6px; display: inline-block; font-weight: 700;">🔴 CANLI YAYIN</span>';
-                  } else if (isLocal) {
-                    statusBadge =
-                      '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' +
-                      escapeHtml(getInstanceName()) +
-                      "'da Mevcut</span>";
-                  }
-
-                  var actionButton = '';
-                  if (isLive) {
-                    actionButton =
-                      '<button class="yaktube-live-btn" data-url="' +
-                      escapeHtml(item.url) +
-                      '" data-title="' +
-                      escapeHtml(item.title) +
-                      '" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" aria-label="' +
-                      escapeHtml(item.title) +
-                      ' canlı yayınını hemen izle">🔴 Canlı Yayını İzle</button>';
-                  } else if (isLocal && item.localVideo && item.localVideo.url) {
-                    actionButton =
-                      '<a href="' +
-                      escapeHtml(item.localVideo.url) +
-                      '" class="yaktube-play-btn" aria-label="' +
-                      escapeHtml(item.title) +
-                      ' videosunu ' +
-                      escapeHtml(getInstanceName()) +
-                      '\'dan hemen izle">▶️ ' +
-                      escapeHtml(getInstanceName()) +
-                      "'dan İzle</a>";
-                  } else {
-                    actionButton =
-                      '<button class="yaktube-import-btn" data-url="' +
-                      escapeHtml(item.url) +
-                      '" data-title="' +
-                      escapeHtml(item.title) +
-                      '" aria-label="' +
-                      escapeHtml(item.title) +
-                      ' videosunu ' +
-                      escapeHtml(getInstanceName()) +
-                      '\'a aktar ve izle">📥 ' +
-                      escapeHtml(getInstanceName()) +
-                      "'a Aktar & İzle</button>";
-                  }
-
-                  var durationText = isLive ? 'CANLI' : item.durationFormatted || formatClockTime(item.duration);
-                  var cardLabel =
-                    item.title +
-                    (isLive ? ' (Canlı Yayın)' : isLocal ? ' (' + getInstanceName() + ' kütüphanenizde mevcut)' : '') +
-                    ', ' +
-                    item.channel +
-                    ' kanalı, Süre: ' +
-                    durationText;
-
-                  ytCardsHtml +=
-                    '<div class="yaktube-card" role="article" tabindex="0" aria-label="' +
-                    escapeHtml(cardLabel) +
-                    '">' +
-                    '<div class="yaktube-thumb-wrap">' +
-                    '<img class="yaktube-thumb-img" src="' +
-                    escapeHtml(item.thumbnail) +
-                    '" alt="' +
-                    escapeHtml(item.title) +
-                    '" loading="lazy" />' +
-                    '<span class="yaktube-duration-badge" style="' +
-                    (isLive ? 'background:#dc2626;font-weight:700;' : '') +
-                    '" aria-label="Süre">' +
-                    escapeHtml(durationText) +
-                    '</span>' +
-                    '</div>' +
-                    '<div class="yaktube-info">' +
-                    '<div>' +
-                    statusBadge +
-                    '<h3 class="yaktube-video-name" title="' +
-                    escapeHtml(item.title) +
-                    '" style="margin:0; font-size:13px; font-weight:600; line-height:1.35;">' +
-                    escapeHtml(item.title) +
-                    '</h3>' +
-                    '<div class="yaktube-channel-name">' +
-                    escapeHtml(item.channel) +
-                    '</div>' +
-                    '</div>' +
-                    actionButton +
-                    '</div>' +
-                    '</div>';
-                });
-
-                if (visibleYtCount < ytCount) {
-                  ytLoadMoreHtml =
-                    '<div style="text-align: center; margin: 20px 0 10px 0;">' +
-                    '<button id="yaktube-load-more-btn" class="yaktube-load-more-btn" style="background: #1e293b; color: #ff8f37; border: 1px solid #ff8f37; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" aria-label="Daha fazla video yükle">' +
-                    '➕ Daha Fazla Video Göster (' +
-                    visibleYtCount +
-                    ' / ' +
-                    ytCount +
-                    ')' +
-                    '</button>' +
-                    '</div>';
-                }
-              }
-
-              // 2. Local Videos Shelf
-              var localShelfHtml = '';
-              if (localResults.length > 0) {
-                var localCardsHtml = '';
-                localResults.forEach(function (lItem) {
-                  var lThumb =
-                    lItem.thumbnailPath ||
-                    (lItem.thumbnails && lItem.thumbnails[0]
-                      ? lItem.thumbnails[0].fileUrl
-                      : '/client/assets/images/default-thumbnail.jpg');
-                  var lDuration = formatClockTime(lItem.duration);
-                  var lChannel =
-                    (lItem.channel && (lItem.channel.displayName || lItem.channel.name)) ||
-                    (lItem.account && (lItem.account.displayName || lItem.account.name)) ||
-                    getInstanceName();
-                  var lWatchUrl = lItem.url || '/videos/watch/' + (lItem.shortUUID || lItem.uuid);
-                  var lViews = (lItem.views || 0) + ' görüntüleme';
-                  var lLabel =
-                    lItem.name +
-                    ', ' +
-                    lChannel +
-                    ', ' +
-                    getInstanceName() +
-                    ' yerel sunucusunda mevcut, Süre: ' +
-                    lDuration;
-
-                  localCardsHtml +=
-                    '<div class="yaktube-card yaktube-local-card" role="article" tabindex="0" aria-label="' +
-                    escapeHtml(lLabel) +
-                    '">' +
-                    '<a href="' +
-                    escapeHtml(lWatchUrl) +
-                    '" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%;">' +
-                    '<div class="yaktube-thumb-wrap">' +
-                    '<img class="yaktube-thumb-img" src="' +
-                    escapeHtml(lThumb) +
-                    '" alt="' +
-                    escapeHtml(lItem.name) +
-                    '" loading="lazy" onerror="this.src=\'/client/assets/images/default-thumbnail.jpg\'" />' +
-                    '<span class="yaktube-duration-badge" aria-label="Süre">' +
-                    escapeHtml(lDuration) +
-                    '</span>' +
-                    '</div>' +
-                    '<div class="yaktube-info">' +
-                    '<div>' +
-                    '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); margin-bottom: 6px; display: inline-block;">✅ ' +
-                    escapeHtml(getInstanceName()) +
-                    "'da Mevcut</span>" +
-                    '<h3 class="yaktube-video-name" title="' +
-                    escapeHtml(lItem.name) +
-                    '" style="margin:0; font-size:13px; font-weight:600; line-height:1.35;">' +
-                    escapeHtml(lItem.name) +
-                    '</h3>' +
-                    '<div class="yaktube-channel-name">' +
-                    escapeHtml(lChannel) +
-                    ' • ' +
-                    escapeHtml(lViews) +
-                    '</div>' +
-                    '</div>' +
-                    '<div class="yaktube-play-btn" style="margin-top:8px;">▶️ ' +
-                    escapeHtml(getInstanceName()) +
-                    "'dan Hemen İzle</div>" +
-                    '</div>' +
-                    '</a>' +
-                    '</div>';
-                });
-
-                localShelfHtml =
-                  '<div id="yaktube-local-shelf" class="yaktube-local-shelf" role="region" aria-label="' +
-                  escapeHtml(getInstanceName()) +
-                  ' Yerel Kütüphanesi">' +
-                  '<div class="yaktube-header" style="margin-top: 24px; border-bottom-color: rgba(16, 185, 129, 0.3);">' +
-                  '<div class="yaktube-header-left">' +
-                  '<span class="yaktube-badge" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">✅ Yerel Kütüphane</span>' +
-                  '<h2 class="yaktube-title-h3" style="margin:0; font-size:1.15rem;">"' +
-                  escapeHtml(query) +
-                  '" için ' +
-                  escapeHtml(getInstanceName()) +
-                  ' Sunucusunda ' +
-                  localTotal +
-                  ' Video Bulundu</h2>' +
-                  '</div>' +
-                  '<span class="yaktube-local-shelf-sub">Doğrudan sunucumuzda barındırılan, yüksek hızlı ve anında izlenebilen videolar</span>' +
-                  '</div>' +
-                  '<div class="yaktube-grid">' +
-                  localCardsHtml +
-                  '</div>' +
-                  '</div>';
-              }
-
-              container.innerHTML =
-                ytHeaderHtml +
-                (ytCount > 0 ? '<div class="yaktube-grid">' + ytCardsHtml + '</div>' : '') +
-                ytLoadMoreHtml +
-                localShelfHtml;
-
-              var sBtn = document.getElementById('yaktube-open-shortcuts');
-              if (sBtn) {
-                sBtn.addEventListener('click', toggleShortcutsModal);
-              }
-
-              var loadMoreBtn = document.getElementById('yaktube-load-more-btn');
-              if (loadMoreBtn) {
-                loadMoreBtn.addEventListener('click', function () {
-                  visibleYtCount = Math.min(visibleYtCount + 6, ytCount);
-                  renderAll();
-                  announce(visibleYtCount + ' adet video gösteriliyor.');
-                });
-              }
-
-              container.querySelectorAll('.yaktube-live-btn').forEach(function (btn) {
-                btn.addEventListener('click', function (e) {
-                  var liveUrl = e.currentTarget.getAttribute('data-url');
-                  var liveTitle = e.currentTarget.getAttribute('data-title');
-                  handleLiveStream(liveUrl, liveTitle);
-                });
-              });
-
-              container.querySelectorAll('.yaktube-import-btn').forEach(function (btn) {
-                btn.addEventListener('click', function (e) {
-                  var videoUrl = e.currentTarget.getAttribute('data-url');
-                  var videoTitle = e.currentTarget.getAttribute('data-title');
-                  handleImport(videoUrl, e.currentTarget, videoTitle);
-                });
-              });
-            }
-
-            renderAll();
-
+          var ytLen = (ytData.results && ytData.results.length) || 0;
+          var localTotal = typeof localData.total === 'number' ? localData.total : (localData.data || []).length;
+          if (ytLen > 0 || localTotal > 0) {
             var announceMsg = '"' + query + '" için arama sonuçları listelendi: ';
             if (localTotal > 0) {
               announceMsg += localTotal + ' adet yerel ' + getInstanceName() + ' videosu, ';
             }
-            if (ytCount > 0) {
-              announceMsg += ytCount + ' adet YouTube sonucu ve ';
+            if (ytLen > 0) {
+              announceMsg += ytLen + ' adet YouTube sonucu ve ';
             }
             announceMsg += 'Fediverse sonuçları hazır.';
             announce(announceMsg);
           }
         })
         .catch(function (err) {
+          if (abortCtrl && abortCtrl.signal && abortCtrl.signal.aborted) return;
           console.error('[YakTube] Search fetch error:', err);
-          container.innerHTML =
+          var activeContainer = ensureSearchContainerMounted();
+          activeContainer.innerHTML =
             '<div class="yaktube-header">' +
             '<div class="yaktube-header-left">' +
             '<span class="yaktube-badge">⚡ Canlı YouTube & Web Arama</span>' +
@@ -4887,7 +4951,9 @@ try {
           announce('Arama sırasında bir bağlantı sorunu oluştu.');
         })
         .finally(function () {
-          isSearching = false;
+          if (!abortCtrl || !abortCtrl.signal || !abortCtrl.signal.aborted) {
+            isSearching = false;
+          }
           ensureFediverseBridge(query, currentSearchTarget);
         });
     }
