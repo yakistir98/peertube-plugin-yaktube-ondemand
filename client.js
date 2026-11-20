@@ -6148,10 +6148,24 @@ try {
     }
     window.__yaktube_play_next_smart__ = playFirstSmartRecommendation;
 
+    function setHiddenImportantIfChanged(el) {
+      if (!el) return;
+      if (el.style.getPropertyValue('display') !== 'none' || el.style.getPropertyPriority('display') !== 'important') {
+        el.style.setProperty('display', 'none', 'important');
+      }
+      if (el.getAttribute('aria-hidden') !== 'true') {
+        el.setAttribute('aria-hidden', 'true');
+      }
+    }
+
     function disableNativePeerTubeAutoplaySwitch() {
       try {
-        localStorage.setItem('auto-play-video', 'false');
-        sessionStorage.setItem('auto-play-video', 'false');
+        if (localStorage.getItem('auto-play-video') !== 'false') {
+          localStorage.setItem('auto-play-video', 'false');
+        }
+        if (sessionStorage.getItem('auto-play-video') !== 'false') {
+          sessionStorage.setItem('auto-play-video', 'false');
+        }
       } catch (e) {}
 
       // Uncheck any native PeerTube Fediverse autoplay checkbox so Angular's internal autoPlayNextVideo stays false
@@ -6171,10 +6185,7 @@ try {
       var nativeAutoplayHeaders = document.querySelectorAll(
         'my-recommended-videos .other-videos-header, .other-videos .other-videos-header, my-recommended-videos my-input-switch, .other-videos my-input-switch, my-recommended-videos .autoplay-line, .other-videos .autoplay-line, #auto-play-video, label[for="auto-play-video"]'
       );
-      nativeAutoplayHeaders.forEach(function (el) {
-        el.style.setProperty('display', 'none', 'important');
-        el.setAttribute('aria-hidden', 'true');
-      });
+      nativeAutoplayHeaders.forEach(setHiddenImportantIfChanged);
     }
 
     function syncPlayerNextButtonAndAutoplayUI() {
@@ -6183,9 +6194,13 @@ try {
 
       var barAutoBtn = document.getElementById('yaktube-bar-autoplay-btn');
       if (barAutoBtn) {
-        barAutoBtn.setAttribute('aria-checked', autoOn ? 'true' : 'false');
-        barAutoBtn.setAttribute('aria-label', 'Akıllı Otomatik Oynatma: ' + (autoOn ? 'Açık' : 'Kapalı'));
-        barAutoBtn.textContent = autoOn ? '🔁 Oto-Oynat: Açık' : '🔁 Oto-Oynat: Kapalı';
+        var nextChecked = autoOn ? 'true' : 'false';
+        var nextAria = 'Akıllı Otomatik Oynatma: ' + (autoOn ? 'Açık' : 'Kapalı');
+        var nextTxt = autoOn ? '🔁 Oto-Oynat: Açık' : '🔁 Oto-Oynat: Kapalı';
+        if (barAutoBtn.getAttribute('aria-checked') !== nextChecked)
+          barAutoBtn.setAttribute('aria-checked', nextChecked);
+        if (barAutoBtn.getAttribute('aria-label') !== nextAria) barAutoBtn.setAttribute('aria-label', nextAria);
+        if (barAutoBtn.textContent !== nextTxt) barAutoBtn.textContent = nextTxt;
       }
 
       var barNextBtn = document.getElementById('yaktube-bar-next-btn');
@@ -6194,29 +6209,26 @@ try {
           firstRec && firstRec.title
             ? 'Sıradaki İlk Öneri: ' + firstRec.title + ' (Shift+N)'
             : 'Sıradaki İlk Önerilen Videoyu Oynat (Shift+N)';
-        barNextBtn.setAttribute('aria-label', barNextLabel);
-        barNextBtn.setAttribute('title', barNextLabel);
+        if (barNextBtn.getAttribute('aria-label') !== barNextLabel) barNextBtn.setAttribute('aria-label', barNextLabel);
+        if (barNextBtn.getAttribute('title') !== barNextLabel) barNextBtn.setAttribute('title', barNextLabel);
       }
 
       if (!isPlaylistWatch()) {
         // Hide PeerTube's native Fediverse upnext overlay inside Video.js so YakTube Smart Autoplay handles it
         var nativeUpNext = document.querySelectorAll('.vjs-upnext-content');
-        nativeUpNext.forEach(function (el) {
-          el.style.setProperty('display', 'none', 'important');
-          el.setAttribute('aria-hidden', 'true');
-        });
+        nativeUpNext.forEach(setHiddenImportantIfChanged);
 
         var nextBtns = document.querySelectorAll('.vjs-next-video, .vjs-next-video-control, .vjs-next-control');
         nextBtns.forEach(function (btn) {
           if (firstRec) {
-            btn.classList.remove('vjs-disabled');
-            btn.classList.remove('vjs-hidden');
-            btn.removeAttribute('disabled');
+            if (btn.classList.contains('vjs-disabled')) btn.classList.remove('vjs-disabled');
+            if (btn.classList.contains('vjs-hidden')) btn.classList.remove('vjs-hidden');
+            if (btn.hasAttribute('disabled')) btn.removeAttribute('disabled');
             var lbl = 'Sonraki Video (İlk Öneri): ' + (firstRec.title || '') + ' (Shift+N)';
-            btn.setAttribute('aria-label', lbl);
-            btn.setAttribute('title', lbl);
+            if (btn.getAttribute('aria-label') !== lbl) btn.setAttribute('aria-label', lbl);
+            if (btn.getAttribute('title') !== lbl) btn.setAttribute('title', lbl);
             var ctrlTxt = btn.querySelector('.vjs-control-text');
-            if (ctrlTxt) ctrlTxt.textContent = lbl;
+            if (ctrlTxt && ctrlTxt.textContent !== lbl) ctrlTxt.textContent = lbl;
           }
         });
       }
@@ -6277,26 +6289,21 @@ try {
             child.classList &&
             (child.classList.contains('other-videos-header') || child.classList.contains('autoplay-line'))
           ) {
-            child.style.setProperty('display', 'none', 'important');
-            child.setAttribute('aria-hidden', 'true');
+            setHiddenImportantIfChanged(child);
             return;
           }
           if (child.tagName && child.tagName.toLowerCase() === 'my-input-switch') {
-            child.style.setProperty('display', 'none', 'important');
-            child.setAttribute('aria-hidden', 'true');
+            setHiddenImportantIfChanged(child);
             return;
           }
           if (shouldShowNativeList) {
-            child.style.removeProperty('display');
-            child.removeAttribute('aria-hidden');
+            if (child.style.getPropertyValue('display')) child.style.removeProperty('display');
+            if (child.hasAttribute('aria-hidden')) child.removeAttribute('aria-hidden');
           } else {
-            child.style.setProperty('display', 'none', 'important');
-            child.setAttribute('aria-hidden', 'true');
+            setHiddenImportantIfChanged(child);
           }
         });
       });
-
-      disableNativePeerTubeAutoplaySwitch();
     }
 
     function renderRelatedCards(container, results, query) {
@@ -6402,9 +6409,11 @@ try {
           ' kanalı, Süre: ' +
           (item.durationFormatted || '');
         cardsHtml +=
-          '<div class="yaktube-card" role="article" tabindex="0" style="margin-bottom:10px;' +
-          (isFirstRec ? ' border: 1.5px solid rgba(255,143,55,0.65);' : '') +
-          '" aria-label="' +
+          '<div class="yaktube-card" data-yt-id="' +
+          escapeHtml(item.id || '') +
+          '" role="article" tabindex="0"' +
+          (isFirstRec ? ' style="border: 1.5px solid rgba(255,143,55,0.65);"' : '') +
+          ' aria-label="' +
           cardLabel.replace(/"/g, '&quot;') +
           '">' +
           '<div class="yaktube-thumb-wrap">' +
@@ -6491,7 +6500,9 @@ try {
         '" İçeriğine Özel Öneriler (' +
         headerCountText +
         ')</h3>' +
+        '<span id="yaktube-smart-prefetch-status-slot">' +
         prefetchStatusHtml +
+        '</span>' +
         '</div>' +
         '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
         '<button id="yaktube-related-play-first-btn" class="yaktube-shortcuts-btn" style="background:rgba(255,143,55,0.16); border-color:#ff8f37; color:#fff; font-weight:700;" aria-label="Sıradaki ilk önerilen videoyu oynat (Shift+N)" title="Sıradaki ilk önerilen videoyu oynat (Shift+N)">' +
@@ -6594,6 +6605,42 @@ try {
       });
     }
 
+    function updatePrefetchBadgeInPlace(status) {
+      var slot = document.getElementById('yaktube-smart-prefetch-status-slot');
+      if (!slot) return;
+      if (status === 'preparing') {
+        slot.innerHTML =
+          '<span id="yaktube-smart-prefetch-status" style="font-size:11px; color:#38bdf8; background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.3); padding:3px 9px; border-radius:20px; font-weight:600;">⚡ Sıradaki öneri arka planda hazırlanıyor...</span>';
+      } else if (status === 'ready') {
+        slot.innerHTML =
+          '<span id="yaktube-smart-prefetch-status" style="font-size:11px; color:#10b981; background:rgba(16,185,129,0.14); border:1px solid rgba(16,185,129,0.35); padding:3px 9px; border-radius:20px; font-weight:700;">✅ Sıradaki öneri kesintisiz izlemeye hazır!</span>';
+      }
+    }
+
+    function upgradePrefetchedCardInPlace(candidate, watchUrl, videoUuid) {
+      if (!candidate || !candidate.id || !watchUrl) return;
+      var card = document.querySelector(
+        '#yaktube-hybrid-related-container .yaktube-card[data-yt-id="' + candidate.id + '"]'
+      );
+      if (!card) return;
+      var btn = card.querySelector('.yaktube-related-import');
+      if (btn && btn.parentNode) {
+        var link = document.createElement('a');
+        link.href = watchUrl;
+        link.className = 'yaktube-play-btn yaktube-related-play-link';
+        link.setAttribute('data-uuid', videoUuid || '');
+        link.setAttribute('data-yt-id', candidate.id || '');
+        link.setAttribute('data-title', candidate.title || '');
+        link.setAttribute('data-channel', candidate.channel || '');
+        link.style.cssText = 'font-size:11px; padding:6px 10px;';
+        link.textContent = '▶️ Hemen İzle';
+        link.addEventListener('click', function () {
+          currentActiveVideoKey = null;
+        });
+        btn.parentNode.replaceChild(link, btn);
+      }
+    }
+
     function triggerSilentBackgroundPrefetch(candidate, videoKey) {
       if (!candidate || !candidate.url || !videoKey) return;
       if (smartPrefetchState.videoKey === videoKey && smartPrefetchState.status !== 'idle') return;
@@ -6627,10 +6674,7 @@ try {
       smartPrefetchState.readyUrl = null;
       smartPrefetchState.readyTitle = candidate.title;
 
-      var relContainer = document.getElementById('yaktube-hybrid-related-container');
-      if (relContainer && cachedRelatedResults.length > 0) {
-        renderRelatedCards(relContainer, cachedRelatedResults, cachedRelatedQuery);
-      }
+      updatePrefetchBadgeInPlace('preparing');
 
       var headers = { 'Content-Type': 'application/json' };
       try {
@@ -6673,10 +6717,8 @@ try {
                 };
               }
             });
-            var relC = document.getElementById('yaktube-hybrid-related-container');
-            if (relC && cachedRelatedResults.length > 0) {
-              renderRelatedCards(relC, cachedRelatedResults, cachedRelatedQuery);
-            }
+            updatePrefetchBadgeInPlace('ready');
+            upgradePrefetchedCardInPlace(candidate, immediateWatchUrl, videoUuid);
             return;
           }
 
@@ -6713,10 +6755,8 @@ try {
                     }
                   });
 
-                  var c = document.getElementById('yaktube-hybrid-related-container');
-                  if (c && cachedRelatedResults.length > 0) {
-                    renderRelatedCards(c, cachedRelatedResults, cachedRelatedQuery);
-                  }
+                  updatePrefetchBadgeInPlace('ready');
+                  upgradePrefetchedCardInPlace(candidate, watchUrl, sData.uuid || videoUuid);
                 } else if (sData && sData.isFailed) {
                   clearInterval(smartPrefetchState.pollTimer);
                   smartPrefetchState.pollTimer = null;
