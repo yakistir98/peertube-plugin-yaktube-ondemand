@@ -3,6 +3,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![PeerTube Engine](https://img.shields.io/badge/PeerTube-%3E%3D5.0.0-orange.svg)](https://joinpeertube.org)
 [![Accessibility: 100%](https://img.shields.io/badge/Accessibility-WCAG%202.1%20AA-green.svg)](https://yaktube.yakhub.com.tr)
+[![YakTube On-Demand on StartupScores](https://startupscores.com/badge/yaktube-on-demand.svg?style=shield&v=combo&theme=dark)](https://startupscores.com/open-source/yaktube-on-demand)
 
 **English** | [Türkçe](#türkçe)
 
